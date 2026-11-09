@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Blueprint do backend — guia</title>
+<style>
+:root {
+  --bp-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --bp-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --bp-bg: #f4f5f7; --bp-surface: #ffffff; --bp-surface-2: #f1f2f4; --bp-border: #1a1d2214;
+  --bp-text: #1a1d22; --bp-text-soft: #5d636e; --bp-text-faint: #8a909a;
+  --bp-accent: #2f3a4a; --bp-accent-text: #fff; --bp-highlight: #e3e8f0; --bp-highlight-text: #2f3a4a;
+  --bp-ok: #3f8f5a; --bp-warn: #8a5a00; --bp-radius: 14px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--bp-font); color: var(--bp-text); background: var(--bp-bg); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+header.capa { background: var(--bp-surface); border-bottom: 1px solid var(--bp-border); }
+.largo { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+.capa .largo { padding-top: 56px; padding-bottom: 40px; }
+.kicker { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--bp-text-soft); }
+h1 { font-size: 40px; line-height: 1.1; letter-spacing: -.03em; margin: 10px 0 14px; }
+h2 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 12px; }
+h3 { font-size: 16px; margin: 20px 0 6px; }
+p, li { color: var(--bp-text-soft); font-size: 15.5px; }
+strong { color: var(--bp-text); }
+code { font-family: var(--bp-font-mono); font-size: .88em; background: var(--bp-surface-2); padding: .1em .35em; border-radius: 5px; color: var(--bp-text); }
+pre { font-family: var(--bp-font-mono); font-size: 13px; background: var(--bp-text); color: #e9edf2; padding: 16px 18px; border-radius: 12px; overflow: auto; line-height: 1.55; }
+pre code { background: none; color: inherit; padding: 0; }
+section { padding: 48px 0; border-bottom: 1px solid var(--bp-border); }
+nav.indice { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+nav.indice a { font-size: 13px; font-weight: 600; text-decoration: none; color: var(--bp-highlight-text); background: var(--bp-highlight); padding: 5px 11px; border-radius: 999px; }
+.moldura { margin-top: 18px; border: 1px solid var(--bp-border); border-radius: var(--bp-radius); overflow: hidden; background: var(--bp-surface); box-shadow: 0 2px 12px #0000001a; }
+.moldura iframe { display: block; width: 100%; height: 640px; border: 0; }
+.moldura .legenda { font-size: 13px; color: var(--bp-text-soft); padding: 10px 14px; border-top: 1px solid var(--bp-border); }
+.grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 14px; }
+.cartao { background: var(--bp-surface); border: 1px solid var(--bp-border); border-radius: var(--bp-radius); padding: 16px 18px; }
+.cartao h3 { margin-top: 0; }
+.cartao p { margin: 0; font-size: 14.5px; }
+.tipo { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--bp-text); }
+.amostra { width: 26px; height: 18px; border-radius: 6px; border: 1px solid var(--bp-border); background: var(--bp-surface); }
+.amostra.system { border: 2px dashed var(--bp-text-faint); }
+.amostra.actor { border-radius: 999px; }
+ol.passos { counter-reset: p; list-style: none; padding: 0; display: grid; gap: 10px; }
+ol.passos li { counter-increment: p; display: flex; gap: 12px; align-items: flex-start; background: var(--bp-surface); border: 1px solid var(--bp-border); border-radius: 12px; padding: 12px 14px; margin: 0; }
+ol.passos li::before { content: counter(p); flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; background: var(--bp-accent); color: var(--bp-accent-text); font-family: var(--bp-font-mono); font-size: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--bp-surface); border-radius: 12px; overflow: hidden; border: 1px solid var(--bp-border); }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--bp-border); vertical-align: top; }
+th { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--bp-text-soft); background: var(--bp-surface-2); }
+td { color: var(--bp-text-soft); }
+td:first-child { color: var(--bp-text); white-space: nowrap; }
+.aviso { background: var(--bp-highlight); color: var(--bp-highlight-text); border-radius: 12px; padding: 12px 16px; font-size: 14.5px; }
+footer { padding: 32px 0 64px; font-size: 13px; color: var(--bp-text-faint); }
+a { color: var(--bp-accent); }
+</style>
+</head>
+<body>
+<header class="capa"><div class="largo">
+  <div class="kicker">Skill · documentação</div>
+  <h1>Blueprint do backend</h1>
+  <p style="font-size:18px;max-width:720px">Um diagrama navegável do backend de qualquer projeto, em qualquer stack: o <strong>modelo conceitual</strong> (o que existe e como se relaciona) com os <strong>fluxos de negócio</strong> desenhados por cima, passo a passo — num único HTML, com as cores do próprio projeto. Feito para que uma IA gere e para que o desenvolvedor entenda o sistema sem ler o código inteiro.</p>
+  <nav class="indice">
+    <a href="#exemplo">Exemplo</a><a href="#ideia">A ideia</a><a href="#como">Como a IA constrói</a>
+    <a href="#formato">Formato</a><a href="#cores">Cores do projeto</a><a href="#usar">Usar o diagrama</a><a href="#pasta">Arquivos</a>
+  </nav>
+</div></header>
+
+<main class="largo">
+<section id="exemplo">
+  <div class="kicker">Exemplo</div>
+  <h2>Loja Aurora, uma loja virtual fictícia</h2>
+  <p>16 conceitos, 19 relações e 6 fluxos — com jobs, webhooks, uma variante e uma divergência entre o app e a API —, nas cores (também fictícias) da loja. Escolha um fluxo na lista e clique em <strong>Apresentar</strong>.</p>
+  <div class="moldura">
+    <iframe src="exemplos/loja-aurora/loja-aurora-blueprint.html#fluxo=flw_confirmar" title="Exemplo: blueprint do backend da Loja Aurora" loading="lazy"></iframe>
+    <div class="legenda">Fluxo “Confirmar o pagamento” destacado: números nas relações usadas, seta tracejada onde não há relação, o resto esmaecido. <a href="exemplos/loja-aurora/loja-aurora-blueprint.html" target="_blank">Abrir em tela cheia</a>.</div>
+  </div>
+</section>
+
+<section id="ideia">
+  <div class="kicker">A ideia</div>
+  <h2>Um modelo parado, fluxos que acendem o caminho</h2>
+  <p>O ER mostra tabelas, mas esconde o gateway, a fila e quem aperta o botão. O diagrama de sequência mostra a ordem de um fluxo só. Aqui o mapa fica parado e cada fluxo acende o seu caminho nele — dá para ver que “Pedido” é tocado por seis fluxos diferentes.</p>
+  <div class="grade">
+    <div class="cartao"><h3><span class="tipo"><span class="amostra"></span>Entidade</span></h3><p>O que o backend guarda: tabela, coleção, agregado. Pedido, Produto, Conta.</p></div>
+    <div class="cartao"><h3><span class="tipo"><span class="amostra system"></span>Sistema</span></h3><p>Com o que o backend conversa ou o que roda sozinho: gateway de pagamento, fila de jobs, e-mail, transportadora.</p></div>
+    <div class="cartao"><h3><span class="tipo"><span class="amostra actor"></span>Ator</span></h3><p>Quem age de fora: comprador, equipe de suporte, operador de caixa.</p></div>
+  </div>
+  <h3>O passo de um fluxo</h3>
+  <p>Uma interação <code>de → para : ação</code> — “Gateway → Pedido: confirma por webhook” — com as <strong>mudanças de estado</strong> (<code>paid → refunded</code>), as <strong>regras</strong>, as <strong>mensagens de erro reais</strong> e a <strong>fonte</strong> no código. Sem relação entre os dois conceitos, o passo vira uma seta tracejada — e isso já é informação.</p>
+</section>
+
+<section id="como">
+  <div class="kicker">Para a IA</div>
+  <h2>Como a IA constrói</h2>
+  <ol class="passos">
+    <li><div><strong>Combina o escopo</strong> com o desenvolvedor: backend inteiro ou um recorte, e onde salvar (fora do repositório, por padrão).</div></li>
+    <li><div><strong>Levanta o backend</strong>: entidades no schema (Drizzle, Prisma, Django, Rails…), sistemas nas integrações, webhooks e jobs, atores nos papéis, fluxos nos casos de uso — sempre com o arquivo de origem. <a href="referencia/03-levantar-o-backend.md">Guia</a>.</div></li>
+    <li><div><strong>Escreve o <code>blueprint.json</code></strong> e valida com <code>node modelos/validar.mjs</code>. <a href="referencia/02-modelo-json.md">Formato</a>.</div></li>
+    <li><div><strong>Extrai as cores do projeto</strong> (tokens, Tailwind, CSS do painel, tema) para um <code>tokens.css</code>, com a origem de cada valor. <a href="referencia/04-identidade-visual.md">Guia</a>.</div></li>
+    <li><div><strong>Monta o HTML</strong> com <code>node modelos/montar.mjs</code>, abre e confere. <a href="referencia/06-checklist.md">Checklist</a>.</div></li>
+    <li><div><strong>Entrega</strong> dizendo o que cobriu, o que ficou de fora e as divergências que achou no código.</div></li>
+  </ol>
+  <p class="aviso"><strong>Regra de ouro:</strong> fonte no código e nada inventado. Um diagrama bonito com regra falsa é pior que nenhum.</p>
+</section>
+
+<section id="formato">
+  <div class="kicker">Formato</div>
+  <h2>O <code>blueprint.json</code></h2>
+<pre><code>{
+  "project":   { "name": "Loja Aurora — backend da loja virtual", "source": "loja-aurora · src/", "generatedAt": "2026-11-09", "locale": "pt-BR" },
+  "concepts":  [ { "id": "ent_pedidos", "name": "Pedido", "code": "ORDERS", "kind": "entity", "description": "…" } ],
+  "relations": [ { "id": "rel_12", "from": "ent_pagamentos", "to": "sys_gateway", "label": "é processado no" } ],
+  "flows": [ {
+    "id": "flw_confirmar", "name": "Confirmar o pagamento", "actor": "Gateway de pagamento (webhook)",
+    "steps": [ {
+      "title": "Receber o webhook", "from": "sys_gateway", "to": "ent_pagamentos", "action": "confirma por webhook",
+      "changes": ["Pagamento: `pending → paid`"], "rules": ["…"], "errors": ["mensagem real do código"]
+    } ]
+  } ]
+}</code></pre>
+  <p>Detalhes campo a campo em <a href="referencia/02-modelo-json.md"><code>referencia/02-modelo-json.md</code></a>; schema formal em <code>modelos/blueprint.schema.json</code>. A interface sai em português ou inglês conforme <code>project.locale</code> (<code>"pt-BR"</code> ou <code>"en"</code>).</p>
+</section>
+
+<section id="cores">
+  <div class="kicker">Identidade visual</div>
+  <h2>As cores do projeto, não as nossas</h2>
+  <p>O visualizador só lê variáveis <code>--bp-*</code>. A IA procura as fontes de verdade do design do projeto e as traduz:</p>
+  <table>
+    <tr><th>Variável</th><th>Papel</th><th>Onde procurar</th></tr>
+    <tr><td><code>--bp-accent</code></td><td>Cor de ação: números dos passos, botão principal</td><td><code>primary</code>, cor da marca</td></tr>
+    <tr><td><code>--bp-highlight</code></td><td>Ativo/selecionado, ícone dos conceitos</td><td><code>accent</code>, tom claro da marca</td></tr>
+    <tr><td><code>--bp-bg</code> · <code>--bp-surface</code></td><td>Fundo do diagrama · cartões</td><td><code>muted</code>/fundo de página · <code>card</code></td></tr>
+    <tr><td><code>--bp-text</code> · <code>-soft</code> · <code>-faint</code></td><td>Texto principal, de apoio, metadado</td><td><code>foreground</code>, <code>muted-foreground</code></td></tr>
+    <tr><td><code>--bp-edge</code> · <code>--bp-edge-strong</code></td><td>Relações · caminho do fluxo</td><td>cor da marca e versão escura</td></tr>
+    <tr><td><code>--bp-font</code> · <code>--bp-radius</code></td><td>Tipografia · forma</td><td><code>font-family</code>, <code>--radius</code></td></tr>
+  </table>
+  <p>Ordem de busca: arquivo de tokens → Tailwind → variáveis CSS do painel → tema da biblioteca de componentes → app mobile → documentação de design → logo. Guia completo em <a href="referencia/04-identidade-visual.md"><code>referencia/04-identidade-visual.md</code></a>.</p>
+</section>
+
+<section id="usar">
+  <div class="kicker">Para o desenvolvedor</div>
+  <h2>Usando o diagrama</h2>
+  <table>
+    <tr><th>Ação</th><th>Como</th></tr>
+    <tr><td>Ver um fluxo</td><td>Lista à esquerda (<code>L</code>) ou busca (<code>/</code>)</td></tr>
+    <tr><td>Apresentar passo a passo</td><td><strong>Apresentar</strong> ou <code>P</code>; <code>←</code> <code>→</code>; <code>Esc</code> sai</td></tr>
+    <tr><td>Detalhe de um conceito</td><td>Clique nele: descrição, atributos, relações e fluxos</td></tr>
+    <tr><td>Ler como documento / imprimir</td><td><strong>Documento</strong> ou <code>D</code>; a impressão sai em texto corrido</td></tr>
+    <tr><td>Levar para outro lugar</td><td><strong>Exportar .md</strong>; link direto <code>#fluxo=&lt;id&gt;&amp;passo=&lt;n&gt;</code></td></tr>
+    <tr><td>Câmera</td><td>Arrastar move, roda dá zoom, <code>F</code> ajusta</td></tr>
+  </table>
+</section>
+
+<section id="pasta">
+  <div class="kicker">Arquivos</div>
+  <h2>O que tem na pasta</h2>
+<pre><code>blueprint-backend/
+├── SKILL.md                       entrada da skill (nome, gatilhos, passo a passo)
+├── guia.html                      este guia
+├── referencia/
+│   ├── 01-o-que-e.md              a ideia e o que mostrar
+│   ├── 02-modelo-json.md          o formato, campo a campo
+│   ├── 03-levantar-o-backend.md   achar conceitos e fluxos em qualquer stack
+│   ├── 04-identidade-visual.md    cores e fontes do projeto → --bp-*
+│   ├── 05-visualizacao.md         como o visualizador desenha; evoluir para app
+│   └── 06-checklist.md            conferência antes de entregar
+├── modelos/
+│   ├── visualizador.html          o visualizador (arquivo único, sem rede)
+│   ├── tokens.css                 tokens a preencher
+│   ├── blueprint.schema.json      JSON Schema
+│   ├── validar.mjs                validação (Node, sem dependências)
+│   └── montar.mjs                 valida e monta o HTML final
+└── exemplos/loja-aurora/          exemplo fictício: blueprint.json, tokens.css e o HTML montado</code></pre>
+<pre><code>node modelos/validar.mjs projeto/blueprint.json
+node modelos/montar.mjs  projeto/blueprint.json projeto/tokens.css projeto/blueprint.html</code></pre>
+</section>
+</main>
+<footer class="largo">Blueprint do backend · skill para agentes de código · o exemplo é um projeto fictício.</footer>
+</body>
+</html>

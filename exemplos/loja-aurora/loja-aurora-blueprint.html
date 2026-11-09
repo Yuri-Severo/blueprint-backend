@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Blueprint do backend</title>
+<!--
+  Visualizador do blueprint do backend. Arquivo único, sem dependências e sem
+  rede. Duas coisas são trocadas por projeto (modelos/montar.mjs faz isso):
+    1. <style id="bp-tokens">  → cores, fontes e raios do projeto (tokens.css)
+    2. <script id="bp-dados">  → o modelo (blueprint.json)
+  O resto não deve ser editado à mão: os componentes só leem var(--bp-*).
+-->
+<style id="bp-tokens">
+/* BP-TOKENS:INICIO — de exemplos/loja-aurora/tokens.css */
+/*
+ * Loja Aurora (projeto FICTÍCIO). Num projeto real, cada valor vem de uma
+ * fonte de verdade do repositório; aqui elas são imaginárias, mas o registro
+ * segue o mesmo formato:
+ *   packages/ui/src/theme.ts      (paleta: indigo, pêssego, neutros)
+ *   apps/admin/src/globals.css    (--radius, sombras do painel)
+ * Regra da marca: índigo é a cor de ação; pêssego marca o item selecionado.
+ */
+:root {
+  --bp-font: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif; /* theme.ts fontFamily.sans */
+  --bp-font-mono: "JetBrains Mono", ui-monospace, monospace;           /* theme.ts fontFamily.mono */
+
+  --bp-bg: #f6f5fb;        /* neutral.50 */
+  --bp-dot: #d2cfe3;       /* neutral.300 */
+  --bp-surface: #ffffff;   /* white */
+  --bp-surface-2: #f0eef8; /* neutral.100 */
+  --bp-border: #1e19451a;  /* ink com 10% (o tema não tem cor de borda própria) */
+
+  --bp-text: #1e1945;       /* ink */
+  --bp-text-soft: #5c5878;  /* neutral.600 */
+  --bp-text-faint: #8d89a6; /* neutral.400 */
+
+  --bp-accent: #4a3fd0;         /* indigo.600: cor de ação */
+  --bp-accent-text: #ffffff;    /* contraste 6,9:1 sobre indigo.600 */
+  --bp-highlight: #ffe2d4;      /* peach.100: selecionado */
+  --bp-highlight-text: #7a2f12; /* peach.900 */
+
+  --bp-edge: #6d66b3;        /* indigo.400 */
+  --bp-edge-strong: #2f278f; /* indigo.800 */
+
+  --bp-ok: #2f8a5b;      /* success */
+  --bp-warn: #8a5a00;    /* warning (texto) */
+  --bp-warn-bg: #fdf1db; /* warning (fundo) */
+  --bp-danger: #c2362b;  /* danger */
+
+  --bp-radius: 12px;    /* globals.css --radius */
+  --bp-radius-sm: 8px;  /* botões do painel */
+  --bp-shadow: 0 1px 2px #1e19451a, 0 4px 10px -2px #1e194514;
+  --bp-shadow-float: 0 4px 18px #1e194526;
+}
+/* BP-TOKENS:FIM */
+</style>
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: var(--bp-font); color: var(--bp-text); background: var(--bp-bg);
+  -webkit-font-smoothing: antialiased; overflow: hidden;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+.mono { font-family: var(--bp-font-mono); }
+code { font-family: var(--bp-font-mono); font-size: .92em; background: var(--bp-surface-2); padding: 0 .3em; border-radius: 4px; }
+
+/* Palco do diagrama */
+#palco { position: fixed; inset: 0; cursor: grab; touch-action: none; }
+#palco.arrastando { cursor: grabbing; }
+#palco svg { width: 100%; height: 100%; display: block; }
+.no { cursor: pointer; }
+.no-caixa {
+  height: 100%; display: flex; align-items: center; gap: 10px; padding: 0 14px 0 10px;
+  background: var(--bp-surface); border: 1px solid var(--bp-border); border-radius: var(--bp-radius);
+  box-shadow: var(--bp-shadow); transition: opacity .2s, box-shadow .2s;
+}
+.no-caixa.system { border: 2px dashed var(--bp-text-faint); }
+.no-caixa.actor { border-radius: 999px; }
+.no-caixa.selecionado { box-shadow: 0 0 0 2px var(--bp-bg), 0 0 0 4px var(--bp-edge); }
+.no-icone {
+  width: 34px; height: 34px; flex: none; border-radius: 999px; display: grid; place-items: center;
+  background: var(--bp-highlight); color: var(--bp-highlight-text);
+}
+.no-nome { font-weight: 700; font-size: 15px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.no-tipo {
+  flex: none; font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--bp-text-soft); background: var(--bp-surface-2); padding: 2px 6px; border-radius: 6px;
+}
+.apagado { opacity: .18; }
+.aresta { fill: none; stroke: var(--bp-edge); stroke-width: 1.6; transition: opacity .2s; }
+.aresta.no-fluxo { stroke: var(--bp-edge-strong); stroke-width: 3; }
+.aresta.seta-fluxo { stroke: var(--bp-edge-strong); stroke-width: 2.4; stroke-dasharray: 7 6; }
+.rotulo {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 220px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; font-size: 11.5px; font-weight: 600; color: var(--bp-text);
+  background: var(--bp-surface); border: 1px solid var(--bp-border); border-radius: 999px; padding: 2px 9px;
+}
+svg.longe .rotulo.comum { display: none; }
+.rotulo.passo { border-color: var(--bp-accent); padding-left: 2px; font-size: 12px; }
+.num {
+  flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 999px;
+  background: var(--bp-accent); color: var(--bp-accent-text); font-family: var(--bp-font-mono); font-size: 11px; font-weight: 600;
+}
+.num.grande { width: 30px; height: 30px; font-size: 13px; }
+
+/* Superfícies flutuantes */
+.flutuante { position: fixed; z-index: 5; background: var(--bp-surface); border: 1px solid var(--bp-border); border-radius: var(--bp-radius); box-shadow: var(--bp-shadow-float); }
+#titulo { top: 16px; left: 16px; padding: 9px 14px; max-width: min(520px, calc(100vw - 32px)); }
+#titulo h1 { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#titulo p { margin: 1px 0 0; font-size: 12.5px; color: var(--bp-text-soft); }
+#barra { z-index: 7; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 6px; }
+.bt {
+  height: 36px; min-width: 36px; padding: 0 10px; border: 0; border-radius: var(--bp-radius-sm); background: transparent;
+  color: var(--bp-text-soft); font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.bt:hover { background: var(--bp-surface-2); color: var(--bp-text); }
+.bt.ativo { background: var(--bp-highlight); color: var(--bp-highlight-text); }
+.bt:focus-visible, .item:focus-visible { outline: 2px solid var(--bp-edge); outline-offset: 2px; }
+.sep { width: 1px; height: 22px; background: var(--bp-border); margin: 0 4px; }
+#zoom-pct { min-width: 54px; justify-content: center; font-variant-numeric: tabular-nums; }
+
+#busca { top: 16px; right: 16px; width: 280px; padding: 0; z-index: 7; }
+#busca input { width: 100%; height: 42px; border: 0; background: transparent; padding: 0 14px; font: inherit; font-size: 14px; color: var(--bp-text); outline: none; }
+#busca-res { max-height: 50vh; overflow: auto; border-top: 1px solid var(--bp-border); padding: 4px; }
+#busca-res:empty { display: none; }
+
+#fluxos { top: 80px; left: 16px; bottom: 84px; width: 300px; display: flex; flex-direction: column; overflow: hidden; }
+#fluxos header, #detalhe header { padding: 12px 14px 10px; border-bottom: 1px solid var(--bp-border); }
+#fluxos h2, #detalhe h2 { margin: 0; font-size: 14px; font-weight: 700; }
+.lista { overflow: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.item { display: block; width: 100%; text-align: left; border: 0; background: transparent; border-radius: 10px; padding: 8px 10px; }
+.item:hover { background: var(--bp-surface-2); }
+.item.ativo { background: var(--bp-highlight); }
+.item b { display: block; font-size: 13.5px; color: var(--bp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item small { display: block; font-size: 12px; color: var(--bp-text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.variante { margin-left: 14px; width: calc(100% - 14px); border-left: 2px solid var(--bp-border); border-radius: 0 10px 10px 0; }
+
+#detalhe { top: 80px; right: 16px; bottom: 84px; width: 380px; overflow: auto; }
+#detalhe .corpo { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.kicker { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--bp-text-soft); }
+.titulo-g { font-size: 19px; font-weight: 800; letter-spacing: -.02em; margin: 2px 0 0; }
+.texto { font-size: 14px; line-height: 1.55; color: var(--bp-text-soft); }
+.texto p { margin: 0 0 6px; }
+.meta { display: grid; gap: 8px; background: var(--bp-surface-2); border-radius: 12px; padding: 10px 12px; }
+.meta div { font-size: 13px; }
+.meta span { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--bp-text-faint); }
+.passo-item { display: flex; gap: 10px; align-items: flex-start; }
+.passo-item .item { padding: 6px 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { font-size: 12px; font-weight: 600; background: var(--bp-surface-2); border-radius: 6px; padding: 2px 7px; color: var(--bp-text); }
+.chip.mono { font-size: 11px; color: var(--bp-text-soft); }
+.bloco h4 { margin: 0 0 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--bp-text-soft); }
+.bloco ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.bloco li { font-size: 13.5px; line-height: 1.5; display: flex; gap: 8px; }
+.bloco li::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 999px; margin-top: 8px; background: var(--bp-text-faint); }
+.bloco.mudancas li::before { background: var(--bp-accent); }
+.bloco.regras li::before { background: var(--bp-ok); }
+.bloco.erros li::before { background: var(--bp-warn); }
+table.atributos { width: 100%; border-collapse: separate; border-spacing: 0 3px; font-size: 12.5px; }
+table.atributos td { background: var(--bp-surface-2); padding: 4px 8px; }
+table.atributos td:first-child { border-radius: 6px 0 0 6px; font-weight: 600; }
+table.atributos td:last-child { border-radius: 0 6px 6px 0; color: var(--bp-text-faint); font-family: var(--bp-font-mono); font-size: 11px; text-align: right; }
+
+#apresentacao { left: 50%; bottom: 18px; transform: translateX(-50%); width: min(720px, calc(100vw - 32px)); max-height: 46vh; display: flex; flex-direction: column; z-index: 6; }
+#apresentacao header { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px 10px; border-bottom: 1px solid var(--bp-border); }
+#apresentacao .corpo { overflow: auto; padding: 12px 16px; display: grid; gap: 12px; }
+#apresentacao footer { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--bp-border); }
+.bt.primario { background: var(--bp-accent); color: var(--bp-accent-text); }
+.bt.primario:hover { background: var(--bp-accent); opacity: .92; color: var(--bp-accent-text); }
+
+/* Vista documento (e impressão) */
+#documento { position: fixed; inset: 0; overflow: auto; background: var(--bp-bg); z-index: 6; padding: 84px 24px 120px; }
+#documento article { max-width: 820px; margin: 0 auto 56px; }
+#documento h1 { font-size: 30px; letter-spacing: -.03em; margin: 6px 0 8px; }
+.passos-doc { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; }
+.passos-doc > li { display: flex; gap: 14px; }
+.cartao { flex: 1; background: var(--bp-surface); border: 1px solid var(--bp-border); border-radius: var(--bp-radius); padding: 16px 18px; display: grid; gap: 10px; }
+.cartao h3 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
+[hidden] { display: none !important; }
+/* Janela estreita (ou embutida): painéis menores, para sobrar diagrama. */
+@media (max-width: 1100px) {
+  #fluxos { width: 240px; }
+  #detalhe { width: 300px; }
+  #busca { width: 220px; }
+  #titulo { max-width: calc(100vw - 270px); }
+}
+@media print {
+  body { overflow: visible; background: #fff; }
+  #palco, .flutuante { display: none !important; }
+  #documento { position: static; padding: 0; overflow: visible; }
+  #documento article { page-break-after: always; }
+  .cartao { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<div id="palco" aria-label="Diagrama conceitual do backend"><svg id="svg"></svg></div>
+
+<div id="titulo" class="flutuante"><h1 id="titulo-nome"></h1><p id="titulo-resumo"></p></div>
+
+<div id="busca" class="flutuante">
+  <input id="busca-input" type="search" placeholder="Buscar conceito ou fluxo  ( / )" autocomplete="off" aria-label="Buscar" />
+  <div id="busca-res" class="lista"></div>
+</div>
+
+<aside id="fluxos" class="flutuante" aria-label="Fluxos">
+  <header><h2>Fluxos</h2></header>
+  <div id="fluxos-lista" class="lista"></div>
+</aside>
+
+<aside id="detalhe" class="flutuante" hidden aria-live="polite"></aside>
+
+<section id="apresentacao" class="flutuante" hidden aria-live="polite"></section>
+
+<main id="documento" hidden></main>
+
+<nav id="barra" class="flutuante" aria-label="Ferramentas">
+  <button class="bt ativo" id="bt-fluxos" title="Lista de fluxos (L)">Fluxos</button>
+  <button class="bt" id="bt-vista" title="Alternar diagrama e documento (D)">Documento</button>
+  <span class="sep"></span>
+  <button class="bt" id="bt-menos" title="Diminuir zoom (−)" aria-label="Diminuir zoom">−</button>
+  <button class="bt" id="zoom-pct" title="Voltar a 100%">100%</button>
+  <button class="bt" id="bt-mais" title="Aumentar zoom (+)" aria-label="Aumentar zoom">+</button>
+  <button class="bt" id="bt-ajustar" title="Ajustar à tela (F)">Ajustar</button>
+  <span class="sep"></span>
+  <button class="bt" id="bt-apresentar" title="Apresentar o fluxo (P)" disabled>Apresentar</button>
+  <button class="bt" id="bt-exportar" title="Baixar os fluxos em Markdown">Exportar .md</button>
+</nav>
+
+<script type="application/json" id="bp-dados">
+{"project":{"name":"Loja Aurora — backend da loja virtual","description":"Projeto FICTÍCIO usado como exemplo da skill. Os caminhos de arquivo e as mensagens imitam um backend Node/TypeScript típico; num projeto real, tudo sai do código.","source":"loja-aurora · src/","generatedAt":"2026-11-09","locale":"pt-BR"},"concepts":[{"id":"act_cliente","name":"Cliente","code":"LOJA WEB · APP","kind":"actor","description":"Quem compra pelo site ou pelo app."},{"id":"act_atendimento","name":"Atendimento","code":"PAINEL ADMIN","kind":"actor","description":"Equipe da loja: analisa devoluções e prepara envios pelo painel administrativo."},{"id":"ent_contas","name":"Conta","code":"CUSTOMERS","kind":"entity","description":"Cadastro de quem compra: dados de contato e endereços.","source":"src/customers/customer.entity.ts","attributes":[{"name":"id","label":"Id","type":"uuid","pk":true},{"name":"email","label":"E-mail","type":"string"},{"name":"document","label":"CPF","type":"string"}]},{"id":"ent_produtos","name":"Produto","code":"PRODUCTS","kind":"entity","description":"O que se vende: nome, preço e se está à venda.","source":"src/catalog/product.entity.ts","attributes":[{"name":"id","label":"Id","type":"uuid","pk":true},{"name":"price","label":"Preço","type":"decimal"},{"name":"status","label":"Situação","type":"enum","values":["draft","active","archived"]}]},{"id":"ent_estoque","name":"Estoque","code":"INVENTORY","kind":"entity","description":"Quantidade disponível e reservada de cada produto. Reservar não é vender: a reserva vira baixa só quando o pagamento confirma.","source":"src/inventory/inventory.entity.ts","attributes":[{"name":"productId","label":"Produto","type":"uuid","fk":"PRODUCTS"},{"name":"available","label":"Disponível","type":"int"},{"name":"reserved","label":"Reservado","type":"int"}]},{"id":"ent_carrinhos","name":"Carrinho","code":"CARTS","kind":"entity","description":"Itens escolhidos antes de fechar a compra. Fica `open` até virar pedido (`converted`) ou ser abandonado.","source":"src/cart/cart.entity.ts","attributes":[{"name":"id","label":"Id","type":"uuid","pk":true},{"name":"customerId","label":"Conta","type":"uuid","fk":"CUSTOMERS"},{"name":"status","label":"Situação","type":"enum","values":["open","converted","abandoned"]},{"name":"couponCode","label":"Cupom","type":"string"}]},{"id":"ent_pedidos","name":"Pedido","code":"ORDERS","kind":"entity","description":"Uma compra fechada. Nasce `pending_payment`, vira `paid` quando o pagamento confirma e segue para envio; pode expirar, ser cancelado ou devolvido.","source":"src/orders/order.entity.ts","attributes":[{"name":"id","label":"Id","type":"uuid","pk":true},{"name":"customerId","label":"Conta","type":"uuid","fk":"CUSTOMERS"},{"name":"status","label":"Situação","type":"enum","values":["pending_payment","paid","ready","shipped","delivered","expired","canceled","returned"]},{"name":"total","label":"Total","type":"decimal"},{"name":"expiresAt","label":"Expira em","type":"datetime"}]},{"id":"ent_itens","name":"Item do pedido","code":"ORDER_ITEMS","kind":"entity","description":"Produto, quantidade e preço congelado no momento da compra.","source":"src/orders/order-item.entity.ts","attributes":[{"name":"orderId","label":"Pedido","type":"uuid","fk":"ORDERS"},{"name":"productId","label":"Produto","type":"uuid","fk":"PRODUCTS"},{"name":"quantity","label":"Quantidade","type":"int"},{"name":"unitPrice","label":"Preço unitário","type":"decimal"}]},{"id":"ent_cupons","name":"Cupom","code":"COUPONS","kind":"entity","description":"Desconto por código, com validade e limite de usos.","source":"src/coupons/coupon.entity.ts","attributes":[{"name":"code","label":"Código","type":"string","pk":true},{"name":"percent","label":"Desconto (%)","type":"int"},{"name":"usesLeft","label":"Usos restantes","type":"int"},{"name":"validUntil","label":"Válido até","type":"datetime"}]},{"id":"ent_pagamentos","name":"Pagamento","code":"PAYMENTS","kind":"entity","description":"Cobrança de um pedido no gateway. `pending` até o webhook confirmar; `refunded` depois de um estorno.","source":"src/payments/payment.entity.ts","attributes":[{"name":"orderId","label":"Pedido","type":"uuid","fk":"ORDERS"},{"name":"method","label":"Forma","type":"enum","values":["card","pix","boleto"]},{"name":"status","label":"Situação","type":"enum","values":["pending","paid","failed","refunded"]},{"name":"providerId","label":"Id no gateway","type":"string"}]},{"id":"ent_envios","name":"Envio","code":"SHIPMENTS","kind":"entity","description":"Despacho do pedido pela transportadora, com código de rastreio.","source":"src/shipping/shipment.entity.ts","attributes":[{"name":"orderId","label":"Pedido","type":"uuid","fk":"ORDERS"},{"name":"status","label":"Situação","type":"enum","values":["ready","shipped","delivered"]},{"name":"trackingCode","label":"Rastreio","type":"string"}]},{"id":"ent_devolucoes","name":"Devolução","code":"RETURNS","kind":"entity","description":"Pedido de devolução de uma compra entregue. Passa por análise do atendimento antes do estorno.","source":"src/returns/return.entity.ts","attributes":[{"name":"orderId","label":"Pedido","type":"uuid","fk":"ORDERS"},{"name":"reason","label":"Motivo","type":"text"},{"name":"status","label":"Situação","type":"enum","values":["requested","approved","rejected","refunded"]}]},{"id":"sys_gateway","name":"Gateway de pagamento","code":"PSP","kind":"system","description":"Cobra e estorna. Responde na hora, mas o resultado definitivo chega depois, por webhook."},{"id":"sys_transportadora","name":"Transportadora","code":"API DE FRETE","kind":"system","description":"Recebe a solicitação de coleta e devolve o rastreio por webhook."},{"id":"sys_jobs","name":"Filas e jobs","code":"WORKERS","kind":"system","description":"Trabalho em segundo plano: expira pedidos não pagos e libera reservas de estoque."},{"id":"sys_email","name":"E-mail","code":"PROVEDOR DE E-MAIL","kind":"system","description":"Avisos ao cliente: compra confirmada, pedido enviado, devolução aprovada."}],"relations":[{"id":"rel_01","from":"act_cliente","to":"ent_contas","label":"é dono de","cardinality":["1","1"]},{"id":"rel_02","from":"act_cliente","to":"ent_carrinhos","label":"monta","cardinality":["1","0..1"]},{"id":"rel_03","from":"act_cliente","to":"ent_pedidos","label":"faz","cardinality":["1","0..*"]},{"id":"rel_04","from":"ent_contas","to":"ent_carrinhos","label":"tem","cardinality":["1","0..1"]},{"id":"rel_05","from":"ent_carrinhos","to":"ent_pedidos","label":"vira","cardinality":["1","0..1"]},{"id":"rel_06","from":"ent_carrinhos","to":"ent_estoque","label":"reserva","cardinality":["0..*","0..*"]},{"id":"rel_07","from":"ent_cupons","to":"ent_carrinhos","label":"desconta","cardinality":["0..1","0..*"]},{"id":"rel_08","from":"ent_pedidos","to":"ent_itens","label":"tem","cardinality":["1","1..*"]},{"id":"rel_09","from":"ent_produtos","to":"ent_itens","label":"aparece em","cardinality":["1","0..*"]},{"id":"rel_10","from":"ent_produtos","to":"ent_estoque","label":"tem","cardinality":["1","1"]},{"id":"rel_11","from":"ent_pedidos","to":"ent_pagamentos","label":"é pago por","cardinality":["1","1..*"]},{"id":"rel_12","from":"ent_pagamentos","to":"sys_gateway","label":"é processado no","cardinality":["1","1"]},{"id":"rel_13","from":"ent_pedidos","to":"ent_envios","label":"gera","cardinality":["1","0..1"]},{"id":"rel_14","from":"ent_envios","to":"sys_transportadora","label":"é despachado pela","cardinality":["1","1"]},{"id":"rel_15","from":"ent_pedidos","to":"ent_devolucoes","label":"pode ter","cardinality":["1","0..*"]},{"id":"rel_16","from":"act_atendimento","to":"ent_devolucoes","label":"analisa","cardinality":["1","0..*"]},{"id":"rel_17","from":"sys_jobs","to":"ent_estoque","label":"libera reserva","cardinality":["1","0..*"]},{"id":"rel_18","from":"ent_pedidos","to":"sys_email","label":"notifica por","cardinality":["1","0..*"]},{"id":"rel_19","from":"act_atendimento","to":"ent_envios","label":"prepara","cardinality":["1","0..*"]}],"flows":[{"id":"flw_comprar","name":"Finalizar a compra","summary":"Do carrinho até a cobrança no gateway. O pedido ainda não está pago no fim deste fluxo: quem confirma é o webhook (fluxo seguinte).","actor":"Cliente","trigger":"O cliente clica em Finalizar compra","outcome":"Pedido `pending_payment`, estoque reservado e cobrança enviada ao gateway","sources":["src/checkout/checkout.service.ts","src/inventory/inventory.service.ts","src/payments/payments.service.ts"],"steps":[{"title":"Fechar o carrinho","from":"act_cliente","to":"ent_carrinhos","action":"fecha o carrinho","description":"`POST /checkout`. As validações rodam nesta ordem.","rules":["Carrinho com pelo menos um item.","Cupom, se houver: dentro da validade e com usos restantes."],"errors":["Seu carrinho está vazio.","Cupom inválido ou expirado."],"also":["ent_cupons"],"source":"src/checkout/checkout.service.ts"},{"title":"Reservar o estoque","from":"ent_carrinhos","to":"ent_estoque","action":"reserva os itens","description":"A reserva segura a quantidade enquanto o pagamento não confirma.","changes":["Estoque: `available − qtd`, `reserved + qtd`"],"errors":["Produto sem estoque suficiente."],"source":"src/inventory/inventory.service.ts"},{"title":"Criar o pedido","from":"ent_carrinhos","to":"ent_pedidos","action":"vira pedido","description":"Preços são copiados para os itens: mudar o preço do produto depois não altera o pedido.","changes":["Pedido: criado `pending_payment`, com `expiresAt` em 30 minutos","Carrinho: `open → converted`","Cupom: `usesLeft − 1`"],"also":["ent_itens"]},{"title":"Criar a cobrança","from":"ent_pedidos","to":"ent_pagamentos","action":"cria a cobrança","changes":["Pagamento: criado `pending`"]},{"title":"Cobrar no gateway","from":"ent_pagamentos","to":"sys_gateway","action":"cobra","description":"A resposta imediata do gateway só diz se a cobrança foi aceita para processamento.","rules":["Cartão: autorização e captura na mesma chamada.","Pix: QR Code válido por 30 minutos (o mesmo prazo de expiração do pedido)."],"errors":["Pagamento recusado pela operadora."],"source":"src/payments/payments.service.ts"}]},{"id":"flw_confirmar","name":"Confirmar o pagamento","summary":"O gateway avisa por webhook que o dinheiro entrou. É este fluxo, e não o checkout, que grava o pedido como pago.","actor":"Gateway de pagamento (webhook)","trigger":"O gateway chama `POST /webhooks/payments`","outcome":"Pedido `paid`, estoque baixado e envio pronto para preparar","sources":["src/webhooks/payments.webhook.ts","src/orders/orders.service.ts"],"steps":[{"title":"Receber o webhook","from":"sys_gateway","to":"ent_pagamentos","action":"confirma por webhook","rules":["Assinatura do webhook conferida antes de qualquer escrita.","Idempotente pela chave `providerEventId`: o mesmo aviso duas vezes não muda nada."],"errors":["Assinatura inválida."],"changes":["Pagamento: `pending → paid`"],"source":"src/webhooks/payments.webhook.ts"},{"title":"Liberar o pedido","from":"ent_pagamentos","to":"ent_pedidos","action":"libera o pedido","changes":["Pedido: `pending_payment → paid`"]},{"title":"Baixar a reserva","from":"ent_pedidos","to":"ent_estoque","action":"baixa a reserva","description":"Não há relação modelada entre Pedido e Estoque: o serviço de pedidos chama o de estoque direto (por isso a seta tracejada).","changes":["Estoque: `reserved − qtd`"]},{"title":"Gerar o envio","from":"ent_pedidos","to":"ent_envios","action":"gera o envio","changes":["Envio: criado `ready`","Pedido: `paid → ready`"]},{"title":"Avisar o cliente","from":"ent_pedidos","to":"sys_email","action":"avisa a compra","description":"Falha no e-mail não desfaz o pagamento: o envio é tentado de novo pela fila."}]},{"id":"flw_expirar","name":"Expirar um pedido não pago","summary":"Um job a cada minuto procura pedidos vencidos e devolve o estoque reservado.","actor":"Filas e jobs","trigger":"`expiresAt` do pedido passou sem confirmação de pagamento","outcome":"Pedido `expired` e estoque de volta à venda","sources":["src/jobs/expire-orders.job.ts"],"steps":[{"title":"Expirar o pedido","from":"sys_jobs","to":"ent_pedidos","action":"expira","rules":["Só pedidos `pending_payment` com `expiresAt` no passado."],"changes":["Pedido: `pending_payment → expired`"]},{"title":"Liberar a reserva","from":"sys_jobs","to":"ent_estoque","action":"libera a reserva","changes":["Estoque: `available + qtd`, `reserved − qtd`"]},{"title":"Avisar o cliente","from":"ent_pedidos","to":"sys_email","action":"avisa a expiração"}]},{"id":"flw_enviar","name":"Enviar o pedido","summary":"Da separação no painel até a entrega confirmada pela transportadora.","actor":"Atendimento","trigger":"Pedido `ready` aparece na fila de expedição do painel","outcome":"Pedido `delivered`","sources":["src/shipping/shipping.service.ts","src/webhooks/carrier.webhook.ts"],"steps":[{"title":"Preparar o envio","from":"act_atendimento","to":"ent_envios","action":"separa e embala","description":"No painel, botão **Marcar como pronto para coleta**."},{"title":"Solicitar a coleta","from":"ent_envios","to":"sys_transportadora","action":"solicita a coleta","changes":["Envio: `ready → shipped`, com `trackingCode`","Pedido: `ready → shipped`"],"errors":["CEP fora da área de atendimento da transportadora."]},{"title":"Confirmar a entrega","from":"sys_transportadora","to":"ent_envios","action":"atualiza por webhook","changes":["Envio: `shipped → delivered`","Pedido: `shipped → delivered`"]},{"title":"Avisar o cliente","from":"ent_pedidos","to":"sys_email","action":"avisa o envio"}]},{"id":"flw_devolver","name":"Devolver e reembolsar","summary":"Devolução de uma compra entregue, com análise do atendimento antes do estorno.","actor":"Cliente e Atendimento","trigger":"O cliente pede a devolução na página do pedido","outcome":"Devolução `refunded`, pagamento estornado e produto de volta ao estoque","sources":["src/returns/returns.service.ts","src/payments/refunds.service.ts"],"steps":[{"title":"Pedir a devolução","from":"act_cliente","to":"ent_pedidos","action":"pede devolução","rules":["Só pedido `delivered`.","Até 7 dias corridos depois da entrega (direito de arrependimento)."],"errors":["Prazo de devolução encerrado."]},{"title":"Abrir a devolução","from":"ent_pedidos","to":"ent_devolucoes","action":"abre a devolução","changes":["Devolução: criada `requested`"]},{"title":"Analisar","from":"act_atendimento","to":"ent_devolucoes","action":"aprova ou recusa","description":"O atendimento confere o produto quando ele chega de volta.","changes":["Devolução: `requested → approved` (ou `rejected`)"]},{"title":"Estornar","from":"ent_pagamentos","to":"sys_gateway","action":"estorna","changes":["Pagamento: `paid → refunded`","Devolução: `approved → refunded`","Pedido: `delivered → returned`"],"errors":["Estorno recusado: prazo do gateway para estorno de cartão excedido."],"also":["ent_devolucoes","ent_pedidos"],"source":"src/payments/refunds.service.ts"},{"title":"Devolver ao estoque","from":"ent_devolucoes","to":"ent_estoque","action":"devolve ao estoque","changes":["Estoque: `available + qtd`"]}]},{"id":"flw_cancelar","name":"Cancelar antes do envio","variantOf":"flw_devolver","summary":"Cancelamento pelo próprio cliente, sem análise, enquanto o pedido não saiu para entrega.","actor":"Cliente","trigger":"O cliente clica em Cancelar pedido","outcome":"Pedido `canceled`, pagamento estornado e estoque devolvido","sources":["src/orders/cancel-order.service.ts","web/src/pages/order/[id].tsx"],"steps":[{"title":"Cancelar","from":"act_cliente","to":"ent_pedidos","action":"cancela","rules":["A API aceita o cancelamento em `paid` e `ready`.","**Divergência:** o app só mostra o botão em `paid`. Em `ready`, o cliente precisa falar com o atendimento, embora a API aceitasse."],"errors":["Pedido já enviado não pode ser cancelado."],"changes":["Pedido: `paid`/`ready` → `canceled`"],"source":"src/orders/cancel-order.service.ts"},{"title":"Estornar","from":"ent_pagamentos","to":"sys_gateway","action":"estorna","changes":["Pagamento: `paid → refunded`"]},{"title":"Devolver ao estoque","from":"ent_pedidos","to":"ent_estoque","action":"devolve ao estoque","changes":["Estoque: `available + qtd`"]}]}]}
+</script>
+<script>
+"use strict";
+/* ---------- dados ---------- */
+const D = JSON.parse(document.getElementById("bp-dados").textContent);
+const C = new Map(D.concepts.map((c) => [c.id, c]));
+const R = D.relations.filter((r) => C.has(r.from) && C.has(r.to) && r.from !== r.to);
+const F = D.flows;
+const par = (a, b) => [a, b].sort().join("|");
+const relPorPar = new Map();
+for (const r of R) if (!relPorPar.has(par(r.from, r.to))) relPorPar.set(par(r.from, r.to), r);
+/* Interface em pt-BR (padrão) ou en, por `project.locale`. Os textos do
+   modelo (nomes, regras, erros) aparecem como foram escritos. */
+const I18N = {
+  "pt-BR": {
+    entity: "entidade", system: "sistema", actor: "ator", flows: "Fluxos", document: "Documento", diagram: "Diagrama",
+    fit: "Ajustar", fitTitle: "Ajustar à tela (F)", present: "Apresentar", presentTitle: "Apresentar o fluxo (P)",
+    export: "Exportar .md", exportTitle: "Baixar os fluxos em Markdown", flowsTitle: "Lista de fluxos (L)",
+    viewTitle: "Alternar diagrama e documento (D)", zoomIn: "Aumentar zoom", zoomOut: "Diminuir zoom", zoomReset: "Voltar a 100%",
+    search: "Buscar conceito ou fluxo  ( / )", searchLabel: "Buscar", diagramLabel: "Diagrama conceitual do backend",
+    toolsLabel: "Ferramentas", step: "passo", steps: "passos", variant: "Variante", variantOf: "variante de", variantOfDoc: "Variante de",
+    noFlows: "Nenhum fluxo no modelo.", flow: "Fluxo", who: "Quem executa", starts: "Começa quando", ends: "Termina quando",
+    stepsHint: (n) => `Passos (${n}) — clique para apresentar`, changes: "Mudanças de estado", rules: "Regras",
+    errors: "O que pode dar errado", also: "Também envolve", attributes: "Atributos", relations: "Relações",
+    inFlows: "Aparece nos fluxos", stepOf: (i, n) => `passo ${i} de ${n}`, exit: "Sair da apresentação", prev: "← Anterior",
+    next: "Próximo →", finish: "Concluir", nextIs: "Próximo: ", end: "Fim do fluxo", nothing: "Nada encontrado.",
+    flowCount: (n) => `fluxo · ${n} passos`, source: "Fonte",
+    summary: (c, e, r, f) => `${c} conceitos (${e} entidades) · ${r} relações · ${f} fluxos`, title: "blueprint do backend",
+  },
+  en: {
+    entity: "entity", system: "system", actor: "actor", flows: "Flows", document: "Document", diagram: "Diagram",
+    fit: "Fit", fitTitle: "Fit to screen (F)", present: "Present", presentTitle: "Present the flow (P)",
+    export: "Export .md", exportTitle: "Download the flows as Markdown", flowsTitle: "Flow list (L)",
+    viewTitle: "Toggle diagram and document (D)", zoomIn: "Zoom in", zoomOut: "Zoom out", zoomReset: "Back to 100%",
+    search: "Search concept or flow  ( / )", searchLabel: "Search", diagramLabel: "Backend conceptual diagram",
+    toolsLabel: "Tools", step: "step", steps: "steps", variant: "Variant", variantOf: "variant of", variantOfDoc: "Variant of",
+    noFlows: "No flows in the model.", flow: "Flow", who: "Who runs it", starts: "Starts when", ends: "Ends when",
+    stepsHint: (n) => `Steps (${n}) — click to present`, changes: "State changes", rules: "Rules",
+    errors: "What can go wrong", also: "Also involves", attributes: "Attributes", relations: "Relations",
+    inFlows: "Appears in flows", stepOf: (i, n) => `step ${i} of ${n}`, exit: "Leave presentation", prev: "← Previous",
+    next: "Next →", finish: "Finish", nextIs: "Next: ", end: "End of flow", nothing: "Nothing found.",
+    flowCount: (n) => `flow · ${n} steps`, source: "Source",
+    summary: (c, e, r, f) => `${c} concepts (${e} entities) · ${r} relations · ${f} flows`, title: "backend blueprint",
+  },
+};
+const LANG = String(D.project.locale ?? "pt-BR").toLowerCase().startsWith("en") ? "en" : "pt-BR";
+const T = I18N[LANG];
+document.documentElement.lang = LANG;
+const TIPO = { entity: T.entity, system: T.system, actor: T.actor };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[m]);
+/* Markdown curto, sempre sobre texto escapado: **negrito**, `código`, _itálico_, listas com - */
+function inline(s) {
+  return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])_([^_]+)_/g, "$1<em>$2</em>");
+}
+function md(s) {
+  if (!s || !s.trim()) return "";
+  return s.trim().split(/\n{2,}/).map((b) => {
+    const ls = b.split("\n");
+    if (ls.every((l) => /^\s*[-*]\s+/.test(l))) return "<ul>" + ls.map((l) => "<li>" + inline(l.replace(/^\s*[-*]\s+/, "")) + "</li>").join("") + "</ul>";
+    return "<p>" + ls.map(inline).join("<br>") + "</p>";
+  }).join("");
+}
+const nome = (id) => C.get(id)?.name ?? id;
+
+/* ---------- layout em camadas (esquerda → direita) ---------- */
+const H = 56, GAP_Y = 34, GAP_X = 150;
+/* Ícone (34) + respiros (48) + nome (~9 px por letra a 15/700) + selo do tipo. */
+const SELO = { entity: 68, system: 62, actor: 40 };
+function largura(c) { return Math.max(180, Math.min(420, Math.round(82 + c.name.length * 9.2 + SELO[c.kind]))); }
+const L = new Map(); // id -> {x,y,w,h,camada}
+(function layout() {
+  const ids = D.concepts.map((c) => c.id);
+  const saida = new Map(ids.map((i) => [i, []]));
+  const entrada = new Map(ids.map((i) => [i, []]));
+  for (const r of R) { saida.get(r.from).push(r.to); entrada.get(r.to).push(r.from); }
+  // Atores começam o fluxo: entram primeiro na ordem de visita.
+  const ordem = [...ids].sort((a, b) => (C.get(a).kind === "actor" ? 0 : 1) - (C.get(b).kind === "actor" ? 0 : 1));
+  // DFS para achar arestas de volta (ciclos) e uma ordem topológica.
+  const estado = new Map(), topo = [], volta = new Set();
+  const visitar = (u) => {
+    estado.set(u, 1);
+    for (const v of saida.get(u)) {
+      if (estado.get(v) === 1) volta.add(u + ">" + v);
+      else if (!estado.has(v)) visitar(v);
+    }
+    estado.set(u, 2); topo.push(u);
+  };
+  for (const u of ordem) if (!estado.has(u) && entrada.get(u).length === 0) visitar(u);
+  for (const u of ordem) if (!estado.has(u)) visitar(u);
+  topo.reverse();
+  const camada = new Map(ids.map((i) => [i, 0]));
+  for (const u of topo) for (const v of saida.get(u)) if (!volta.has(u + ">" + v)) camada.set(v, Math.max(camada.get(v), camada.get(u) + 1));
+  // Puxa cada nó para perto dos sucessores (evita colunas vazias à esquerda).
+  for (const u of [...topo].reverse()) {
+    const suc = saida.get(u).filter((v) => !volta.has(u + ">" + v));
+    if (suc.length && entrada.get(u).length === 0) camada.set(u, Math.max(camada.get(u), Math.min(...suc.map((v) => camada.get(v))) - 1));
+  }
+  const nCam = Math.max(0, ...camada.values()) + 1;
+  const cams = Array.from({ length: nCam }, () => []);
+  for (const u of ordem) cams[camada.get(u)].push(u);
+  // Ordena cada camada pelo baricentro dos vizinhos (algumas passadas).
+  const pos = new Map();
+  const marcar = () => cams.forEach((cam) => cam.forEach((u, i) => pos.set(u, i)));
+  marcar();
+  const viz = (u) => [...saida.get(u), ...entrada.get(u)];
+  for (let it = 0; it < 6; it++) {
+    const seq = it % 2 ? [...cams].reverse() : cams;
+    for (const cam of seq) {
+      const bc = new Map(cam.map((u) => {
+        const vs = viz(u).filter((v) => camada.get(v) !== camada.get(u));
+        return [u, vs.length ? vs.reduce((s, v) => s + pos.get(v), 0) / vs.length : pos.get(u)];
+      }));
+      cam.sort((a, b) => bc.get(a) - bc.get(b));
+      marcar();
+    }
+  }
+  const alturaMax = Math.max(...cams.map((cam) => cam.length)) * (H + GAP_Y);
+  let x = 0;
+  cams.forEach((cam, ci) => {
+    const w = Math.max(...cam.map((u) => largura(C.get(u))), 190);
+    const topoY = (alturaMax - cam.length * (H + GAP_Y)) / 2;
+    cam.forEach((u, i) => L.set(u, { x, y: topoY + i * (H + GAP_Y), w: largura(C.get(u)), h: H, camada: ci }));
+    x += w + GAP_X;
+  });
+})();
+
+/* ---------- desenho ---------- */
+const NS = "http://www.w3.org/2000/svg";
+const svg = $("svg");
+const el = (tag, attrs = {}, pai) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (pai) pai.appendChild(e); return e; };
+const defs = el("defs", {}, svg);
+const padrao = el("pattern", { id: "pontos", width: 24, height: 24, patternUnits: "userSpaceOnUse" }, defs);
+el("circle", { cx: 1.5, cy: 1.5, r: 1.3, fill: "var(--bp-dot)" }, padrao);
+for (const [id, cor] of [["seta", "var(--bp-edge)"], ["seta-forte", "var(--bp-edge-strong)"]]) {
+  const m = el("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: "auto-start-reverse" }, defs);
+  el("path", { d: "M0,0 L10,5 L0,10 z", fill: cor }, m);
+}
+const mundo = el("g", {}, svg);
+el("rect", { x: -100000, y: -100000, width: 200000, height: 200000, fill: "url(#pontos)" }, mundo);
+const gArestas = el("g", {}, mundo), gSetas = el("g", {}, mundo), gNos = el("g", {}, mundo), gRotulos = el("g", {}, mundo);
+
+const ICONE = {
+  entity: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/></svg>',
+  system: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="4" width="17" height="6.5" rx="1.8"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="1.8"/><path d="M7.5 7.2h.01M7.5 16.7h.01"/></svg>',
+  actor: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.8"/><path d="M4.5 20.5c1-3.6 4-5.6 7.5-5.6s6.5 2 7.5 5.6"/></svg>',
+};
+
+/* Ponto de saída/entrada no lado de cada nó; curva Bézier entre eles. */
+function caminho(a, b, t = 0.5) {
+  const A = L.get(a), B = L.get(b);
+  let x1, x2, c1, c2;
+  if (B.x > A.x + A.w / 2) { x1 = A.x + A.w; x2 = B.x; const d = Math.max(40, (x2 - x1) / 2); c1 = x1 + d; c2 = x2 - d; }
+  else if (B.x + B.w < A.x + A.w / 2) { x1 = A.x; x2 = B.x + B.w; const d = Math.max(40, (x1 - x2) / 2); c1 = x1 - d; c2 = x2 + d; }
+  else { x1 = A.x + A.w; x2 = B.x + B.w; c1 = x1 + 70; c2 = x2 + 70; }
+  const y1 = A.y + A.h / 2, y2 = B.y + B.h / 2;
+  const mx = (1 - t) ** 3 * x1 + 3 * (1 - t) ** 2 * t * c1 + 3 * (1 - t) * t ** 2 * c2 + t ** 3 * x2;
+  const my = (1 - t) ** 3 * y1 + 3 * (1 - t) ** 2 * t * y1 + 3 * (1 - t) * t ** 2 * y2 + t ** 3 * y2;
+  return { d: `M${x1},${y1} C${c1},${y1} ${c2},${y2} ${x2},${y2}`, mx, my };
+}
+function rotulo(x, y, html, cls = "") {
+  const w = 240, h = 26;
+  const fo = el("foreignObject", { x: x - w / 2, y: y - h / 2, width: w, height: h, style: "overflow:visible;pointer-events:none" }, gRotulos);
+  fo.innerHTML = `<div xmlns="http://www.w3.org/1999/xhtml" style="display:flex;justify-content:center;align-items:center;height:${h}px"><span class="rotulo ${cls}">${html}</span></div>`;
+  return fo;
+}
+
+const vAresta = new Map(), vNo = new Map();
+for (const r of R) {
+  const p = caminho(r.from, r.to);
+  const path = el("path", { d: p.d, class: "aresta", "marker-end": "url(#seta)" }, gArestas);
+  vAresta.set(r.id, { path, p, rot: null, r });
+}
+for (const c of D.concepts) {
+  const pos = L.get(c.id);
+  const fo = el("foreignObject", { x: pos.x, y: pos.y, width: pos.w, height: pos.h, class: "no", tabindex: 0, role: "button", "aria-label": `${c.name} (${TIPO[c.kind]})` }, gNos);
+  fo.innerHTML = `<div xmlns="http://www.w3.org/1999/xhtml" class="no-caixa ${c.kind}" title="${esc(c.description ?? "")}"><span class="no-icone">${ICONE[c.kind]}</span><span class="no-nome">${esc(c.name)}</span><span class="no-tipo">${TIPO[c.kind]}</span></div>`;
+  fo.addEventListener("click", (e) => { e.stopPropagation(); if (!movido) mostrarConceito(c.id); });
+  fo.addEventListener("keydown", (e) => { if (e.key === "Enter") mostrarConceito(c.id); });
+  vNo.set(c.id, fo);
+}
+const gBadges = el("g", {}, mundo);
+
+/* ---------- câmera: arrastar e zoom ---------- */
+let cam = { x: 0, y: 0, k: 1 }, movido = false;
+function aplicar() {
+  mundo.setAttribute("transform", `translate(${cam.x},${cam.y}) scale(${cam.k})`);
+  $("zoom-pct").textContent = Math.round(cam.k * 100) + "%";
+  /* De longe, os rótulos das relações comuns viram ruído: só os do fluxo ficam. */
+  svg.classList.toggle("longe", cam.k < 0.7);
+}
+function zoomEm(k, cx, cy) {
+  k = Math.min(2, Math.max(0.12, k));
+  cam.x = cx - (cx - cam.x) * (k / cam.k); cam.y = cy - (cy - cam.y) * (k / cam.k); cam.k = k; aplicar();
+}
+/* Enquadra os nós dados descontando os painéis abertos. */
+function enquadrar(ids, anim = true, area) {
+  const ns = ids.length ? ids.map((i) => L.get(i)).filter(Boolean) : [...L.values()];
+  if (!ns.length) return;
+  const x0 = Math.min(...ns.map((n) => n.x)), y0 = Math.min(...ns.map((n) => n.y));
+  const x1 = Math.max(...ns.map((n) => n.x + n.w)), y1 = Math.max(...ns.map((n) => n.y + n.h));
+  const esq = $("fluxos").hidden ? 32 : $("fluxos").offsetWidth + 40;
+  const dir = $("detalhe").hidden ? 32 : $("detalhe").offsetWidth + 40;
+  const a = area ?? { x: esq, y: 84, w: innerWidth - esq - dir, h: innerHeight - 84 - 96 };
+  const k = Math.min(1.1, Math.max(0.12, Math.min(a.w / (x1 - x0 + 80), a.h / (y1 - y0 + 80))));
+  const alvo = { k, x: a.x + a.w / 2 - ((x0 + x1) / 2) * k, y: a.y + a.h / 2 - ((y0 + y1) / 2) * k };
+  if (!anim) { cam = alvo; return aplicar(); }
+  const ini = { ...cam }, t0 = performance.now();
+  const passo = (t) => {
+    const p = Math.min(1, (t - t0) / 380), e = 1 - (1 - p) ** 3;
+    cam = { x: ini.x + (alvo.x - ini.x) * e, y: ini.y + (alvo.y - ini.y) * e, k: ini.k + (alvo.k - ini.k) * e };
+    aplicar(); if (p < 1) requestAnimationFrame(passo);
+  };
+  requestAnimationFrame(passo);
+}
+const palco = $("palco");
+let arraste = null;
+palco.addEventListener("pointerdown", (e) => { arraste = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y }; movido = false; });
+addEventListener("pointermove", (e) => {
+  if (!arraste) return;
+  const dx = e.clientX - arraste.x, dy = e.clientY - arraste.y;
+  if (Math.abs(dx) + Math.abs(dy) > 4) { movido = true; palco.classList.add("arrastando"); }
+  if (movido) { cam.x = arraste.cx + dx; cam.y = arraste.cy + dy; aplicar(); }
+});
+addEventListener("pointerup", () => { if (arraste && !movido && estado.presentacao === null) limparSelecaoConceito(); arraste = null; setTimeout(() => (movido = false)); palco.classList.remove("arrastando"); });
+palco.addEventListener("wheel", (e) => { e.preventDefault(); zoomEm(cam.k * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
+
+/* ---------- estado: fluxo ativo, passo da apresentação ---------- */
+const estado = { fluxo: null, presentacao: null, conceito: null };
+const fluxo = () => F.find((f) => f.id === estado.fluxo);
+
+function caminhoFluxo(f) {
+  const nos = new Map(), rels = new Map(), setas = [];
+  const add = (m, k, n) => { const l = m.get(k) ?? []; if (!l.includes(n)) m.set(k, [...l, n]); };
+  f.steps.forEach((s, i) => {
+    const n = i + 1;
+    add(nos, s.from, n); if (s.to) add(nos, s.to, n);
+    if (!s.to || s.to === s.from) return;
+    const r = relPorPar.get(par(s.from, s.to));
+    if (r) add(rels, r.id, n); else setas.push({ n, de: s.from, para: s.to, acao: s.action });
+  });
+  return { nos, rels, setas };
+}
+
+function desenharDestaque() {
+  const f = fluxo();
+  const cp = f ? caminhoFluxo(f) : null;
+  gSetas.replaceChildren(); gBadges.replaceChildren(); gRotulos.replaceChildren();
+  for (const [id, fo] of vNo) {
+    const caixa = fo.firstChild;
+    caixa.classList.toggle("apagado", !!cp && !cp.nos.has(id) && estado.conceito !== id);
+    caixa.classList.toggle("selecionado", estado.conceito === id);
+    const nums = cp?.nos.get(id);
+    if (nums) {
+      const pos = L.get(id);
+      nums.forEach((n, i) => {
+        const g = el("foreignObject", { x: pos.x - 12 + i * 34, y: pos.y - 15, width: 32, height: 32, style: "overflow:visible;pointer-events:none" }, gBadges);
+        g.innerHTML = `<div xmlns="http://www.w3.org/1999/xhtml"><span class="num grande">${n}</span></div>`;
+      });
+    }
+  }
+  for (const [id, a] of vAresta) {
+    const nums = cp?.rels.get(id);
+    a.path.classList.toggle("no-fluxo", !!nums);
+    a.path.classList.toggle("apagado", !!cp && !nums);
+    a.path.setAttribute("marker-end", nums ? "url(#seta-forte)" : "url(#seta)");
+    if (nums) {
+      nums.forEach((n, i) => rotulo(a.p.mx, a.p.my + i * 28 - ((nums.length - 1) * 14), `<span class="num">${n}</span>${esc(f.steps[n - 1].action || a.r.label)}`, "passo"));
+    } else {
+      const fo = rotulo(a.p.mx, a.p.my, esc(a.r.label), "comum");
+      if (cp) fo.classList.add("apagado");
+    }
+  }
+  for (const s of cp?.setas ?? []) {
+    /* Rótulo da seta a 35% do caminho: no meio ficaria sobre o das relações. */
+    const p = caminho(s.de, s.para, 0.35);
+    el("path", { d: p.d, class: "aresta seta-fluxo", "marker-end": "url(#seta-forte)" }, gSetas);
+    rotulo(p.mx, p.my, `<span class="num">${s.n}</span>${esc(s.acao || T.step)}`, "passo");
+  }
+}
+
+/* ---------- lista de fluxos ---------- */
+function listaFluxos() {
+  const principais = F.filter((f) => !f.variantOf || !F.some((g) => g.id === f.variantOf));
+  const html = [];
+  const item = (f, variante) => `<button class="item ${variante ? "variante" : ""} ${estado.fluxo === f.id ? "ativo" : ""}" data-fluxo="${esc(f.id)}"><b>${esc(f.name)}</b><small>${variante ? T.variant + " · " : ""}${f.steps.length} ${f.steps.length === 1 ? T.step : T.steps}${f.actor ? " · " + esc(f.actor) : ""}</small></button>`;
+  for (const f of principais) {
+    html.push(item(f, false));
+    for (const v of F.filter((g) => g.variantOf === f.id)) html.push(item(v, true));
+  }
+  $("fluxos-lista").innerHTML = html.join("") || `<p class="texto" style="padding:8px">${T.noFlows}</p>`;
+}
+$("fluxos-lista").addEventListener("click", (e) => { const b = e.target.closest("[data-fluxo]"); if (b) selecionarFluxo(b.dataset.fluxo); });
+
+function selecionarFluxo(id, { enquadra = true } = {}) {
+  estado.fluxo = estado.fluxo === id && enquadra ? null : id;
+  estado.conceito = null; estado.presentacao = null;
+  $("apresentacao").hidden = true;
+  $("bt-apresentar").disabled = !estado.fluxo;
+  listaFluxos(); desenharDestaque(); painelFluxo(); hash();
+  /* Em janela estreita, a lista sai da frente ao escolher um fluxo (L volta). */
+  if (estado.fluxo && innerWidth < 1100 && $("bt-fluxos").classList.contains("ativo")) $("bt-fluxos").click();
+  if (enquadra) {
+    const f = fluxo();
+    enquadrar(f ? [...new Set(f.steps.flatMap((s) => (s.to ? [s.from, s.to] : [s.from])))] : []);
+  }
+}
+
+/* ---------- painel de detalhe ---------- */
+function blocos(s) {
+  const lista = (t, cls, itens) => itens?.length ? `<div class="bloco ${cls}"><h4>${t}</h4><ul>${itens.map((x) => `<li><span>${inline(x)}</span></li>`).join("")}</ul></div>` : "";
+  const tambem = s.also?.length ? `<div class="chips"><span class="kicker">${T.also}</span>${s.also.map((id) => `<span class="chip">${esc(nome(id))}</span>`).join("")}</div>` : "";
+  return `${s.description ? `<div class="texto">${md(s.description)}</div>` : ""}${lista(T.changes, "mudancas", s.changes)}${lista(T.rules, "regras", s.rules)}${lista(T.errors, "erros", s.errors)}${tambem}${s.source ? `<div class="chip mono">${esc(s.source)}</div>` : ""}`;
+}
+const quem = (s) => `<div class="chips"><span class="chip">${esc(nome(s.from))}</span>${s.to && s.to !== s.from ? `<span aria-hidden="true">→</span><span class="chip">${esc(nome(s.to))}</span>` : ""}${s.action ? `<em class="texto" style="font-size:13px">· ${esc(s.action)}</em>` : ""}</div>`;
+function meta(f) {
+  const linhas = [[T.who, f.actor], [T.starts, f.trigger], [T.ends, f.outcome]].filter(([, v]) => v);
+  return linhas.length ? `<div class="meta">${linhas.map(([k, v]) => `<div><span>${k}</span>${inline(v)}</div>`).join("")}</div>` : "";
+}
+function painelFluxo() {
+  const f = fluxo(), p = $("detalhe");
+  if (!f) { p.hidden = true; return; }
+  const principal = f.variantOf && F.find((g) => g.id === f.variantOf);
+  p.innerHTML = `<header><div class="kicker">${T.flow}${principal ? " · " + T.variantOf + " " + esc(principal.name) : ""}</div><div class="titulo-g">${esc(f.name)}</div></header>
+  <div class="corpo">${f.summary ? `<div class="texto">${md(f.summary)}</div>` : ""}${meta(f)}
+  <div class="bloco"><h4>${T.stepsHint(f.steps.length)}</h4>
+  ${f.steps.map((s, i) => `<div class="passo-item"><span class="num" style="margin-top:8px">${i + 1}</span><button class="item" data-passo="${i}"><b>${esc(s.title)}</b><small>${esc(nome(s.from))}${s.to && s.to !== s.from ? " → " + esc(nome(s.to)) : ""}${s.action ? " · " + esc(s.action) : ""}</small></button></div>`).join("")}</div></div>`;
+  p.hidden = false;
+}
+$("detalhe").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-passo]"); if (b) return apresentar(+b.dataset.passo);
+  const c = e.target.closest("[data-fluxo]"); if (c) return selecionarFluxo(c.dataset.fluxo);
+});
+function mostrarConceito(id) {
+  const c = C.get(id); if (!c) return;
+  estado.conceito = id;
+  const rels = R.filter((r) => r.from === id || r.to === id);
+  const usados = F.filter((f) => f.steps.some((s) => s.from === id || s.to === id || s.also?.includes(id)));
+  const p = $("detalhe");
+  p.innerHTML = `<header><div class="kicker">${TIPO[c.kind]}</div><div class="titulo-g">${esc(c.name)}</div>${c.code ? `<div class="chip mono" style="display:inline-block;margin-top:4px">${esc(c.code)}</div>` : ""}</header>
+  <div class="corpo">${c.description ? `<div class="texto">${md(c.description)}</div>` : ""}
+  ${c.attributes?.length ? `<div class="bloco"><h4>${T.attributes} (${c.attributes.length})</h4><table class="atributos">${c.attributes.map((a) => `<tr><td>${a.pk ? "🔑 " : ""}${esc(a.label ?? a.name)}</td><td class="mono" style="color:var(--bp-text-faint)">${esc(a.name)}</td><td>${a.fk ? "→ " + esc(a.fk) : esc(a.values?.join(" / ") ?? a.type ?? "")}</td></tr>`).join("")}</table></div>` : ""}
+  ${rels.length ? `<div class="bloco"><h4>${T.relations} (${rels.length})</h4><ul>${rels.map((r) => `<li><span>${esc(nome(r.from))} <em>${esc(r.label)}</em> ${esc(nome(r.to))}${r.cardinality ? ` <span class="mono" style="color:var(--bp-text-faint)">${esc(r.cardinality.join(" : "))}</span>` : ""}</span></li>`).join("")}</ul></div>` : ""}
+  ${usados.length ? `<div class="bloco"><h4>${T.inFlows}</h4>${usados.map((f) => `<button class="item" data-fluxo="${esc(f.id)}"><b>${esc(f.name)}</b></button>`).join("")}</div>` : ""}</div>`;
+  p.hidden = false; desenharDestaque();
+}
+function limparSelecaoConceito() {
+  if (!estado.conceito) return;
+  estado.conceito = null; desenharDestaque();
+  if (estado.fluxo) painelFluxo(); else $("detalhe").hidden = true;
+}
+
+/* ---------- apresentação ---------- */
+function apresentar(i) {
+  const f = fluxo(); if (!f) return;
+  if (i === null || i < 0 || i >= f.steps.length) { estado.presentacao = null; $("apresentacao").hidden = true; $("barra").hidden = false; $("fluxos").hidden = !$("bt-fluxos").classList.contains("ativo"); painelFluxo(); return hash(); }
+  estado.presentacao = i;
+  const s = f.steps[i], ult = i === f.steps.length - 1;
+  $("fluxos").hidden = true; $("detalhe").hidden = true; $("barra").hidden = true;
+  const a = $("apresentacao");
+  a.innerHTML = `<header><span class="num grande">${i + 1}</span><div style="flex:1;min-width:0"><div class="kicker">${esc(f.name)} · ${T.stepOf(i + 1, f.steps.length)}</div><div class="titulo-g">${esc(s.title)}</div>${quem(s)}</div><button class="bt" data-acao="sair" aria-label="${T.exit}">✕</button></header>
+  <div class="corpo">${blocos(s)}</div>
+  <footer><button class="bt" data-acao="ant" ${i === 0 ? "disabled" : ""}>${T.prev}</button><span class="texto" style="flex:1;text-align:center;font-size:13px">${ult ? esc(f.outcome || T.end) : T.nextIs + esc(f.steps[i + 1].title)}</span><button class="bt primario" data-acao="prox">${ult ? T.finish : T.next}</button></footer>`;
+  a.hidden = false;
+  const ids = s.to ? [s.from, s.to] : [s.from];
+  enquadrar(ids, true, { x: innerWidth * 0.15, y: 96, w: innerWidth * 0.7, h: innerHeight * 0.5 - 96 });
+  hash();
+}
+$("apresentacao").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-acao]"); if (!b) return;
+  const i = estado.presentacao;
+  if (b.dataset.acao === "sair") apresentar(null);
+  if (b.dataset.acao === "ant") apresentar(i - 1);
+  if (b.dataset.acao === "prox") apresentar(i + 1 < fluxo().steps.length ? i + 1 : null);
+});
+
+/* ---------- documento (leitura e impressão) ---------- */
+function documento(lista) {
+  return lista.map((f) => {
+    const principal = f.variantOf && F.find((g) => g.id === f.variantOf);
+    return `<article><div class="kicker">${T.flow} · ${esc(D.project.name)}</div><h1>${esc(f.name)}</h1>${principal ? `<p class="texto">${T.variantOfDoc} <strong>${esc(principal.name)}</strong>.</p>` : ""}
+    ${f.summary ? `<div class="texto" style="font-size:16px">${md(f.summary)}</div>` : ""}${meta(f)}
+    <ol class="passos-doc">${f.steps.map((s, i) => `<li><span class="num grande">${i + 1}</span><div class="cartao"><h3>${esc(s.title)}</h3>${quem(s)}${blocos(s)}</div></li>`).join("")}</ol></article>`;
+  }).join("");
+}
+function alternarVista(forcar) {
+  const doc = $("documento"), mostrar = forcar ?? doc.hidden;
+  if (mostrar) { doc.innerHTML = documento(fluxo() ? [fluxo()] : F); doc.scrollTop = 0; }
+  doc.hidden = !mostrar;
+  $("bt-vista").textContent = mostrar ? T.diagram : T.document;
+  $("bt-vista").classList.toggle("ativo", mostrar);
+}
+addEventListener("beforeprint", () => { $("documento").innerHTML = documento(fluxo() ? [fluxo()] : F); });
+addEventListener("afterprint", () => { if ($("documento").hidden) $("documento").innerHTML = ""; });
+
+/* ---------- exportar markdown ---------- */
+function markdown(f) {
+  const o = [`# ${f.name}`, ""];
+  const principal = f.variantOf && F.find((g) => g.id === f.variantOf);
+  if (principal) o.push(`_${T.variantOfDoc} **${principal.name}**._`, "");
+  if (f.summary) o.push(f.summary.trim(), "");
+  for (const [k, v] of [[T.who, f.actor], [T.starts, f.trigger], [T.ends, f.outcome]]) if (v) o.push(`- **${k}:** ${v}`);
+  o.push("", `## ${LANG === "en" ? "Steps" : "Passos"} (${f.steps.length})`, "");
+  f.steps.forEach((s, i) => {
+    o.push(`### ${i + 1}. ${s.title}`, "", `**${nome(s.from)}**${s.to && s.to !== s.from ? ` → **${nome(s.to)}**` : ""}${s.action ? `: _${s.action}_` : ""}`, "");
+    if (s.description) o.push(s.description.trim(), "");
+    for (const [t, l] of [[T.changes, s.changes], [T.rules, s.rules], [T.errors, s.errors]]) if (l?.length) o.push(`**${t}**`, "", ...l.map((x) => `- ${x}`), "");
+    if (s.also?.length) o.push(`**${T.also}:** ${s.also.map(nome).join(", ")}`, "");
+    if (s.source) o.push(`${T.source}: \`${s.source}\``, "");
+  });
+  return o.join("\n").trimEnd() + "\n";
+}
+$("bt-exportar").addEventListener("click", () => {
+  const f = fluxo(), lista = f ? [f] : F;
+  const texto = lista.map(markdown).join("\n---\n\n");
+  const slug = (f ? f.name : D.project.name).normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([texto], { type: "text/markdown;charset=utf-8" }));
+  a.download = `${slug || "flows"}.md`; a.click(); URL.revokeObjectURL(a.href);
+});
+
+/* ---------- busca ---------- */
+const norm = (s) => String(s ?? "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+$("busca-input").addEventListener("input", (e) => {
+  const q = norm(e.target.value.trim());
+  if (!q) return ($("busca-res").innerHTML = "");
+  const fs = F.filter((f) => norm(f.name + " " + (f.actor ?? "")).includes(q)).slice(0, 6);
+  const cs = D.concepts.filter((c) => norm(c.name + " " + (c.code ?? "") + " " + (c.attributes ?? []).map((a) => a.name + " " + (a.label ?? "")).join(" ")).includes(q)).slice(0, 8);
+  $("busca-res").innerHTML = [...fs.map((f) => `<button class="item" data-fluxo="${esc(f.id)}"><b>${esc(f.name)}</b><small>${T.flowCount(f.steps.length)}</small></button>`),
+    ...cs.map((c) => `<button class="item" data-conceito="${esc(c.id)}"><b>${esc(c.name)}</b><small>${TIPO[c.kind]}${c.code ? " · " + esc(c.code) : ""}</small></button>`)].join("") || `<p class="texto" style="padding:8px;margin:0">${T.nothing}</p>`;
+});
+$("busca-res").addEventListener("click", (e) => {
+  const f = e.target.closest("[data-fluxo]"), c = e.target.closest("[data-conceito]");
+  $("busca-input").value = ""; $("busca-res").innerHTML = "";
+  alternarVista(false);
+  if (f) selecionarFluxo(f.dataset.fluxo);
+  if (c) { mostrarConceito(c.dataset.conceito); enquadrar([c.dataset.conceito]); }
+});
+
+/* ---------- barra e atalhos ---------- */
+$("bt-fluxos").addEventListener("click", () => { const b = $("bt-fluxos"); b.classList.toggle("ativo"); $("fluxos").hidden = !b.classList.contains("ativo"); });
+$("bt-vista").addEventListener("click", () => alternarVista());
+$("bt-mais").addEventListener("click", () => zoomEm(cam.k * 1.2, innerWidth / 2, innerHeight / 2));
+$("bt-menos").addEventListener("click", () => zoomEm(cam.k / 1.2, innerWidth / 2, innerHeight / 2));
+$("zoom-pct").addEventListener("click", () => zoomEm(1, innerWidth / 2, innerHeight / 2));
+$("bt-ajustar").addEventListener("click", () => { const f = fluxo(); enquadrar(f ? [...new Set(f.steps.flatMap((s) => (s.to ? [s.from, s.to] : [s.from])))] : []); });
+$("bt-apresentar").addEventListener("click", () => apresentar(0));
+addEventListener("keydown", (e) => {
+  if (e.target.closest?.("input, textarea")) { if (e.key === "Escape") e.target.blur(); return; }
+  if (estado.presentacao !== null) {
+    if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); apresentar(estado.presentacao + 1 < fluxo().steps.length ? estado.presentacao + 1 : null); }
+    else if (e.key === "ArrowLeft") apresentar(Math.max(0, estado.presentacao - 1));
+    else if (e.key === "Escape") apresentar(null);
+    return;
+  }
+  if (e.key === "/") { e.preventDefault(); $("busca-input").focus(); }
+  else if (e.key === "l" || e.key === "L") $("bt-fluxos").click();
+  else if (e.key === "d" || e.key === "D") alternarVista();
+  else if (e.key === "f" || e.key === "F") $("bt-ajustar").click();
+  else if ((e.key === "p" || e.key === "P") && fluxo()) apresentar(0);
+  else if (e.key === "+" || e.key === "=") $("bt-mais").click();
+  else if (e.key === "-") $("bt-menos").click();
+  else if (e.key === "Escape") { if (!$("documento").hidden) alternarVista(false); else if (estado.conceito) limparSelecaoConceito(); else if (estado.fluxo) selecionarFluxo(estado.fluxo); }
+});
+
+/* ---------- link direto: #fluxo=<id>&passo=<n> ---------- */
+function hash() {
+  const p = new URLSearchParams();
+  if (estado.fluxo) p.set("fluxo", estado.fluxo);
+  if (estado.presentacao !== null) p.set("passo", estado.presentacao + 1);
+  history.replaceState(null, "", p.toString() ? "#" + p : location.pathname + location.search);
+}
+
+/* ---------- início ---------- */
+$("titulo-nome").textContent = D.project.name;
+document.title = `${D.project.name} · ${T.title}`;
+const nE = D.concepts.filter((c) => c.kind === "entity").length;
+$("titulo-resumo").textContent = T.summary(D.concepts.length, nE, R.length, F.length);
+for (const [sel, txt, title] of [
+  ["#fluxos h2", T.flows], ["#bt-fluxos", T.flows, T.flowsTitle], ["#bt-vista", T.document, T.viewTitle],
+  ["#bt-ajustar", T.fit, T.fitTitle], ["#bt-apresentar", T.present, T.presentTitle], ["#bt-exportar", T.export, T.exportTitle],
+]) { const e = document.querySelector(sel); e.textContent = txt; if (title) e.title = title; }
+$("bt-mais").setAttribute("aria-label", T.zoomIn); $("bt-mais").title = T.zoomIn + " (+)";
+$("bt-menos").setAttribute("aria-label", T.zoomOut); $("bt-menos").title = T.zoomOut + " (−)";
+$("zoom-pct").title = T.zoomReset;
+$("busca-input").placeholder = T.search; $("busca-input").setAttribute("aria-label", T.searchLabel);
+$("palco").setAttribute("aria-label", T.diagramLabel); $("barra").setAttribute("aria-label", T.toolsLabel);
+$("fluxos").setAttribute("aria-label", T.flows);
+listaFluxos(); aplicar(); desenharDestaque(); enquadrar([], false);
+addEventListener("resize", () => enquadrar([], false));
+{
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (p.get("fluxo") && F.some((f) => f.id === p.get("fluxo"))) {
+    selecionarFluxo(p.get("fluxo"));
+    const n = +p.get("passo"); if (n) apresentar(n - 1);
+  }
+}
+</script>
+</body>
+</html>

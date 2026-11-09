@@ -1,0 +1,482 @@
+{
+  "$schema": "../../modelos/blueprint.schema.json",
+  "project": {
+    "name": "Loja Aurora — backend da loja virtual",
+    "description": "Projeto FICTÍCIO usado como exemplo da skill. Os caminhos de arquivo e as mensagens imitam um backend Node/TypeScript típico; num projeto real, tudo sai do código.",
+    "source": "loja-aurora · src/",
+    "generatedAt": "2026-11-09",
+    "locale": "pt-BR"
+  },
+  "concepts": [
+    {
+      "id": "act_cliente",
+      "name": "Cliente",
+      "code": "LOJA WEB · APP",
+      "kind": "actor",
+      "description": "Quem compra pelo site ou pelo app."
+    },
+    {
+      "id": "act_atendimento",
+      "name": "Atendimento",
+      "code": "PAINEL ADMIN",
+      "kind": "actor",
+      "description": "Equipe da loja: analisa devoluções e prepara envios pelo painel administrativo."
+    },
+    {
+      "id": "ent_contas",
+      "name": "Conta",
+      "code": "CUSTOMERS",
+      "kind": "entity",
+      "description": "Cadastro de quem compra: dados de contato e endereços.",
+      "source": "src/customers/customer.entity.ts",
+      "attributes": [
+        { "name": "id", "label": "Id", "type": "uuid", "pk": true },
+        { "name": "email", "label": "E-mail", "type": "string" },
+        { "name": "document", "label": "CPF", "type": "string" }
+      ]
+    },
+    {
+      "id": "ent_produtos",
+      "name": "Produto",
+      "code": "PRODUCTS",
+      "kind": "entity",
+      "description": "O que se vende: nome, preço e se está à venda.",
+      "source": "src/catalog/product.entity.ts",
+      "attributes": [
+        { "name": "id", "label": "Id", "type": "uuid", "pk": true },
+        { "name": "price", "label": "Preço", "type": "decimal" },
+        { "name": "status", "label": "Situação", "type": "enum", "values": ["draft", "active", "archived"] }
+      ]
+    },
+    {
+      "id": "ent_estoque",
+      "name": "Estoque",
+      "code": "INVENTORY",
+      "kind": "entity",
+      "description": "Quantidade disponível e reservada de cada produto. Reservar não é vender: a reserva vira baixa só quando o pagamento confirma.",
+      "source": "src/inventory/inventory.entity.ts",
+      "attributes": [
+        { "name": "productId", "label": "Produto", "type": "uuid", "fk": "PRODUCTS" },
+        { "name": "available", "label": "Disponível", "type": "int" },
+        { "name": "reserved", "label": "Reservado", "type": "int" }
+      ]
+    },
+    {
+      "id": "ent_carrinhos",
+      "name": "Carrinho",
+      "code": "CARTS",
+      "kind": "entity",
+      "description": "Itens escolhidos antes de fechar a compra. Fica `open` até virar pedido (`converted`) ou ser abandonado.",
+      "source": "src/cart/cart.entity.ts",
+      "attributes": [
+        { "name": "id", "label": "Id", "type": "uuid", "pk": true },
+        { "name": "customerId", "label": "Conta", "type": "uuid", "fk": "CUSTOMERS" },
+        { "name": "status", "label": "Situação", "type": "enum", "values": ["open", "converted", "abandoned"] },
+        { "name": "couponCode", "label": "Cupom", "type": "string" }
+      ]
+    },
+    {
+      "id": "ent_pedidos",
+      "name": "Pedido",
+      "code": "ORDERS",
+      "kind": "entity",
+      "description": "Uma compra fechada. Nasce `pending_payment`, vira `paid` quando o pagamento confirma e segue para envio; pode expirar, ser cancelado ou devolvido.",
+      "source": "src/orders/order.entity.ts",
+      "attributes": [
+        { "name": "id", "label": "Id", "type": "uuid", "pk": true },
+        { "name": "customerId", "label": "Conta", "type": "uuid", "fk": "CUSTOMERS" },
+        { "name": "status", "label": "Situação", "type": "enum", "values": ["pending_payment", "paid", "ready", "shipped", "delivered", "expired", "canceled", "returned"] },
+        { "name": "total", "label": "Total", "type": "decimal" },
+        { "name": "expiresAt", "label": "Expira em", "type": "datetime" }
+      ]
+    },
+    {
+      "id": "ent_itens",
+      "name": "Item do pedido",
+      "code": "ORDER_ITEMS",
+      "kind": "entity",
+      "description": "Produto, quantidade e preço congelado no momento da compra.",
+      "source": "src/orders/order-item.entity.ts",
+      "attributes": [
+        { "name": "orderId", "label": "Pedido", "type": "uuid", "fk": "ORDERS" },
+        { "name": "productId", "label": "Produto", "type": "uuid", "fk": "PRODUCTS" },
+        { "name": "quantity", "label": "Quantidade", "type": "int" },
+        { "name": "unitPrice", "label": "Preço unitário", "type": "decimal" }
+      ]
+    },
+    {
+      "id": "ent_cupons",
+      "name": "Cupom",
+      "code": "COUPONS",
+      "kind": "entity",
+      "description": "Desconto por código, com validade e limite de usos.",
+      "source": "src/coupons/coupon.entity.ts",
+      "attributes": [
+        { "name": "code", "label": "Código", "type": "string", "pk": true },
+        { "name": "percent", "label": "Desconto (%)", "type": "int" },
+        { "name": "usesLeft", "label": "Usos restantes", "type": "int" },
+        { "name": "validUntil", "label": "Válido até", "type": "datetime" }
+      ]
+    },
+    {
+      "id": "ent_pagamentos",
+      "name": "Pagamento",
+      "code": "PAYMENTS",
+      "kind": "entity",
+      "description": "Cobrança de um pedido no gateway. `pending` até o webhook confirmar; `refunded` depois de um estorno.",
+      "source": "src/payments/payment.entity.ts",
+      "attributes": [
+        { "name": "orderId", "label": "Pedido", "type": "uuid", "fk": "ORDERS" },
+        { "name": "method", "label": "Forma", "type": "enum", "values": ["card", "pix", "boleto"] },
+        { "name": "status", "label": "Situação", "type": "enum", "values": ["pending", "paid", "failed", "refunded"] },
+        { "name": "providerId", "label": "Id no gateway", "type": "string" }
+      ]
+    },
+    {
+      "id": "ent_envios",
+      "name": "Envio",
+      "code": "SHIPMENTS",
+      "kind": "entity",
+      "description": "Despacho do pedido pela transportadora, com código de rastreio.",
+      "source": "src/shipping/shipment.entity.ts",
+      "attributes": [
+        { "name": "orderId", "label": "Pedido", "type": "uuid", "fk": "ORDERS" },
+        { "name": "status", "label": "Situação", "type": "enum", "values": ["ready", "shipped", "delivered"] },
+        { "name": "trackingCode", "label": "Rastreio", "type": "string" }
+      ]
+    },
+    {
+      "id": "ent_devolucoes",
+      "name": "Devolução",
+      "code": "RETURNS",
+      "kind": "entity",
+      "description": "Pedido de devolução de uma compra entregue. Passa por análise do atendimento antes do estorno.",
+      "source": "src/returns/return.entity.ts",
+      "attributes": [
+        { "name": "orderId", "label": "Pedido", "type": "uuid", "fk": "ORDERS" },
+        { "name": "reason", "label": "Motivo", "type": "text" },
+        { "name": "status", "label": "Situação", "type": "enum", "values": ["requested", "approved", "rejected", "refunded"] }
+      ]
+    },
+    {
+      "id": "sys_gateway",
+      "name": "Gateway de pagamento",
+      "code": "PSP",
+      "kind": "system",
+      "description": "Cobra e estorna. Responde na hora, mas o resultado definitivo chega depois, por webhook."
+    },
+    {
+      "id": "sys_transportadora",
+      "name": "Transportadora",
+      "code": "API DE FRETE",
+      "kind": "system",
+      "description": "Recebe a solicitação de coleta e devolve o rastreio por webhook."
+    },
+    {
+      "id": "sys_jobs",
+      "name": "Filas e jobs",
+      "code": "WORKERS",
+      "kind": "system",
+      "description": "Trabalho em segundo plano: expira pedidos não pagos e libera reservas de estoque."
+    },
+    {
+      "id": "sys_email",
+      "name": "E-mail",
+      "code": "PROVEDOR DE E-MAIL",
+      "kind": "system",
+      "description": "Avisos ao cliente: compra confirmada, pedido enviado, devolução aprovada."
+    }
+  ],
+  "relations": [
+    { "id": "rel_01", "from": "act_cliente", "to": "ent_contas", "label": "é dono de", "cardinality": ["1", "1"] },
+    { "id": "rel_02", "from": "act_cliente", "to": "ent_carrinhos", "label": "monta", "cardinality": ["1", "0..1"] },
+    { "id": "rel_03", "from": "act_cliente", "to": "ent_pedidos", "label": "faz", "cardinality": ["1", "0..*"] },
+    { "id": "rel_04", "from": "ent_contas", "to": "ent_carrinhos", "label": "tem", "cardinality": ["1", "0..1"] },
+    { "id": "rel_05", "from": "ent_carrinhos", "to": "ent_pedidos", "label": "vira", "cardinality": ["1", "0..1"] },
+    { "id": "rel_06", "from": "ent_carrinhos", "to": "ent_estoque", "label": "reserva", "cardinality": ["0..*", "0..*"] },
+    { "id": "rel_07", "from": "ent_cupons", "to": "ent_carrinhos", "label": "desconta", "cardinality": ["0..1", "0..*"] },
+    { "id": "rel_08", "from": "ent_pedidos", "to": "ent_itens", "label": "tem", "cardinality": ["1", "1..*"] },
+    { "id": "rel_09", "from": "ent_produtos", "to": "ent_itens", "label": "aparece em", "cardinality": ["1", "0..*"] },
+    { "id": "rel_10", "from": "ent_produtos", "to": "ent_estoque", "label": "tem", "cardinality": ["1", "1"] },
+    { "id": "rel_11", "from": "ent_pedidos", "to": "ent_pagamentos", "label": "é pago por", "cardinality": ["1", "1..*"] },
+    { "id": "rel_12", "from": "ent_pagamentos", "to": "sys_gateway", "label": "é processado no", "cardinality": ["1", "1"] },
+    { "id": "rel_13", "from": "ent_pedidos", "to": "ent_envios", "label": "gera", "cardinality": ["1", "0..1"] },
+    { "id": "rel_14", "from": "ent_envios", "to": "sys_transportadora", "label": "é despachado pela", "cardinality": ["1", "1"] },
+    { "id": "rel_15", "from": "ent_pedidos", "to": "ent_devolucoes", "label": "pode ter", "cardinality": ["1", "0..*"] },
+    { "id": "rel_16", "from": "act_atendimento", "to": "ent_devolucoes", "label": "analisa", "cardinality": ["1", "0..*"] },
+    { "id": "rel_17", "from": "sys_jobs", "to": "ent_estoque", "label": "libera reserva", "cardinality": ["1", "0..*"] },
+    { "id": "rel_18", "from": "ent_pedidos", "to": "sys_email", "label": "notifica por", "cardinality": ["1", "0..*"] },
+    { "id": "rel_19", "from": "act_atendimento", "to": "ent_envios", "label": "prepara", "cardinality": ["1", "0..*"] }
+  ],
+  "flows": [
+    {
+      "id": "flw_comprar",
+      "name": "Finalizar a compra",
+      "summary": "Do carrinho até a cobrança no gateway. O pedido ainda não está pago no fim deste fluxo: quem confirma é o webhook (fluxo seguinte).",
+      "actor": "Cliente",
+      "trigger": "O cliente clica em Finalizar compra",
+      "outcome": "Pedido `pending_payment`, estoque reservado e cobrança enviada ao gateway",
+      "sources": ["src/checkout/checkout.service.ts", "src/inventory/inventory.service.ts", "src/payments/payments.service.ts"],
+      "steps": [
+        {
+          "title": "Fechar o carrinho",
+          "from": "act_cliente",
+          "to": "ent_carrinhos",
+          "action": "fecha o carrinho",
+          "description": "`POST /checkout`. As validações rodam nesta ordem.",
+          "rules": ["Carrinho com pelo menos um item.", "Cupom, se houver: dentro da validade e com usos restantes."],
+          "errors": ["Seu carrinho está vazio.", "Cupom inválido ou expirado."],
+          "also": ["ent_cupons"],
+          "source": "src/checkout/checkout.service.ts"
+        },
+        {
+          "title": "Reservar o estoque",
+          "from": "ent_carrinhos",
+          "to": "ent_estoque",
+          "action": "reserva os itens",
+          "description": "A reserva segura a quantidade enquanto o pagamento não confirma.",
+          "changes": ["Estoque: `available − qtd`, `reserved + qtd`"],
+          "errors": ["Produto sem estoque suficiente."],
+          "source": "src/inventory/inventory.service.ts"
+        },
+        {
+          "title": "Criar o pedido",
+          "from": "ent_carrinhos",
+          "to": "ent_pedidos",
+          "action": "vira pedido",
+          "description": "Preços são copiados para os itens: mudar o preço do produto depois não altera o pedido.",
+          "changes": ["Pedido: criado `pending_payment`, com `expiresAt` em 30 minutos", "Carrinho: `open → converted`", "Cupom: `usesLeft − 1`"],
+          "also": ["ent_itens"]
+        },
+        {
+          "title": "Criar a cobrança",
+          "from": "ent_pedidos",
+          "to": "ent_pagamentos",
+          "action": "cria a cobrança",
+          "changes": ["Pagamento: criado `pending`"]
+        },
+        {
+          "title": "Cobrar no gateway",
+          "from": "ent_pagamentos",
+          "to": "sys_gateway",
+          "action": "cobra",
+          "description": "A resposta imediata do gateway só diz se a cobrança foi aceita para processamento.",
+          "rules": ["Cartão: autorização e captura na mesma chamada.", "Pix: QR Code válido por 30 minutos (o mesmo prazo de expiração do pedido)."],
+          "errors": ["Pagamento recusado pela operadora."],
+          "source": "src/payments/payments.service.ts"
+        }
+      ]
+    },
+    {
+      "id": "flw_confirmar",
+      "name": "Confirmar o pagamento",
+      "summary": "O gateway avisa por webhook que o dinheiro entrou. É este fluxo, e não o checkout, que grava o pedido como pago.",
+      "actor": "Gateway de pagamento (webhook)",
+      "trigger": "O gateway chama `POST /webhooks/payments`",
+      "outcome": "Pedido `paid`, estoque baixado e envio pronto para preparar",
+      "sources": ["src/webhooks/payments.webhook.ts", "src/orders/orders.service.ts"],
+      "steps": [
+        {
+          "title": "Receber o webhook",
+          "from": "sys_gateway",
+          "to": "ent_pagamentos",
+          "action": "confirma por webhook",
+          "rules": ["Assinatura do webhook conferida antes de qualquer escrita.", "Idempotente pela chave `providerEventId`: o mesmo aviso duas vezes não muda nada."],
+          "errors": ["Assinatura inválida."],
+          "changes": ["Pagamento: `pending → paid`"],
+          "source": "src/webhooks/payments.webhook.ts"
+        },
+        {
+          "title": "Liberar o pedido",
+          "from": "ent_pagamentos",
+          "to": "ent_pedidos",
+          "action": "libera o pedido",
+          "changes": ["Pedido: `pending_payment → paid`"]
+        },
+        {
+          "title": "Baixar a reserva",
+          "from": "ent_pedidos",
+          "to": "ent_estoque",
+          "action": "baixa a reserva",
+          "description": "Não há relação modelada entre Pedido e Estoque: o serviço de pedidos chama o de estoque direto (por isso a seta tracejada).",
+          "changes": ["Estoque: `reserved − qtd`"]
+        },
+        {
+          "title": "Gerar o envio",
+          "from": "ent_pedidos",
+          "to": "ent_envios",
+          "action": "gera o envio",
+          "changes": ["Envio: criado `ready`", "Pedido: `paid → ready`"]
+        },
+        {
+          "title": "Avisar o cliente",
+          "from": "ent_pedidos",
+          "to": "sys_email",
+          "action": "avisa a compra",
+          "description": "Falha no e-mail não desfaz o pagamento: o envio é tentado de novo pela fila."
+        }
+      ]
+    },
+    {
+      "id": "flw_expirar",
+      "name": "Expirar um pedido não pago",
+      "summary": "Um job a cada minuto procura pedidos vencidos e devolve o estoque reservado.",
+      "actor": "Filas e jobs",
+      "trigger": "`expiresAt` do pedido passou sem confirmação de pagamento",
+      "outcome": "Pedido `expired` e estoque de volta à venda",
+      "sources": ["src/jobs/expire-orders.job.ts"],
+      "steps": [
+        {
+          "title": "Expirar o pedido",
+          "from": "sys_jobs",
+          "to": "ent_pedidos",
+          "action": "expira",
+          "rules": ["Só pedidos `pending_payment` com `expiresAt` no passado."],
+          "changes": ["Pedido: `pending_payment → expired`"]
+        },
+        {
+          "title": "Liberar a reserva",
+          "from": "sys_jobs",
+          "to": "ent_estoque",
+          "action": "libera a reserva",
+          "changes": ["Estoque: `available + qtd`, `reserved − qtd`"]
+        },
+        {
+          "title": "Avisar o cliente",
+          "from": "ent_pedidos",
+          "to": "sys_email",
+          "action": "avisa a expiração"
+        }
+      ]
+    },
+    {
+      "id": "flw_enviar",
+      "name": "Enviar o pedido",
+      "summary": "Da separação no painel até a entrega confirmada pela transportadora.",
+      "actor": "Atendimento",
+      "trigger": "Pedido `ready` aparece na fila de expedição do painel",
+      "outcome": "Pedido `delivered`",
+      "sources": ["src/shipping/shipping.service.ts", "src/webhooks/carrier.webhook.ts"],
+      "steps": [
+        {
+          "title": "Preparar o envio",
+          "from": "act_atendimento",
+          "to": "ent_envios",
+          "action": "separa e embala",
+          "description": "No painel, botão **Marcar como pronto para coleta**."
+        },
+        {
+          "title": "Solicitar a coleta",
+          "from": "ent_envios",
+          "to": "sys_transportadora",
+          "action": "solicita a coleta",
+          "changes": ["Envio: `ready → shipped`, com `trackingCode`", "Pedido: `ready → shipped`"],
+          "errors": ["CEP fora da área de atendimento da transportadora."]
+        },
+        {
+          "title": "Confirmar a entrega",
+          "from": "sys_transportadora",
+          "to": "ent_envios",
+          "action": "atualiza por webhook",
+          "changes": ["Envio: `shipped → delivered`", "Pedido: `shipped → delivered`"]
+        },
+        {
+          "title": "Avisar o cliente",
+          "from": "ent_pedidos",
+          "to": "sys_email",
+          "action": "avisa o envio"
+        }
+      ]
+    },
+    {
+      "id": "flw_devolver",
+      "name": "Devolver e reembolsar",
+      "summary": "Devolução de uma compra entregue, com análise do atendimento antes do estorno.",
+      "actor": "Cliente e Atendimento",
+      "trigger": "O cliente pede a devolução na página do pedido",
+      "outcome": "Devolução `refunded`, pagamento estornado e produto de volta ao estoque",
+      "sources": ["src/returns/returns.service.ts", "src/payments/refunds.service.ts"],
+      "steps": [
+        {
+          "title": "Pedir a devolução",
+          "from": "act_cliente",
+          "to": "ent_pedidos",
+          "action": "pede devolução",
+          "rules": ["Só pedido `delivered`.", "Até 7 dias corridos depois da entrega (direito de arrependimento)."],
+          "errors": ["Prazo de devolução encerrado."]
+        },
+        {
+          "title": "Abrir a devolução",
+          "from": "ent_pedidos",
+          "to": "ent_devolucoes",
+          "action": "abre a devolução",
+          "changes": ["Devolução: criada `requested`"]
+        },
+        {
+          "title": "Analisar",
+          "from": "act_atendimento",
+          "to": "ent_devolucoes",
+          "action": "aprova ou recusa",
+          "description": "O atendimento confere o produto quando ele chega de volta.",
+          "changes": ["Devolução: `requested → approved` (ou `rejected`)"]
+        },
+        {
+          "title": "Estornar",
+          "from": "ent_pagamentos",
+          "to": "sys_gateway",
+          "action": "estorna",
+          "changes": ["Pagamento: `paid → refunded`", "Devolução: `approved → refunded`", "Pedido: `delivered → returned`"],
+          "errors": ["Estorno recusado: prazo do gateway para estorno de cartão excedido."],
+          "also": ["ent_devolucoes", "ent_pedidos"],
+          "source": "src/payments/refunds.service.ts"
+        },
+        {
+          "title": "Devolver ao estoque",
+          "from": "ent_devolucoes",
+          "to": "ent_estoque",
+          "action": "devolve ao estoque",
+          "changes": ["Estoque: `available + qtd`"]
+        }
+      ]
+    },
+    {
+      "id": "flw_cancelar",
+      "name": "Cancelar antes do envio",
+      "variantOf": "flw_devolver",
+      "summary": "Cancelamento pelo próprio cliente, sem análise, enquanto o pedido não saiu para entrega.",
+      "actor": "Cliente",
+      "trigger": "O cliente clica em Cancelar pedido",
+      "outcome": "Pedido `canceled`, pagamento estornado e estoque devolvido",
+      "sources": ["src/orders/cancel-order.service.ts", "web/src/pages/order/[id].tsx"],
+      "steps": [
+        {
+          "title": "Cancelar",
+          "from": "act_cliente",
+          "to": "ent_pedidos",
+          "action": "cancela",
+          "rules": [
+            "A API aceita o cancelamento em `paid` e `ready`.",
+            "**Divergência:** o app só mostra o botão em `paid`. Em `ready`, o cliente precisa falar com o atendimento, embora a API aceitasse."
+          ],
+          "errors": ["Pedido já enviado não pode ser cancelado."],
+          "changes": ["Pedido: `paid`/`ready` → `canceled`"],
+          "source": "src/orders/cancel-order.service.ts"
+        },
+        {
+          "title": "Estornar",
+          "from": "ent_pagamentos",
+          "to": "sys_gateway",
+          "action": "estorna",
+          "changes": ["Pagamento: `paid → refunded`"]
+        },
+        {
+          "title": "Devolver ao estoque",
+          "from": "ent_pedidos",
+          "to": "ent_estoque",
+          "action": "devolve ao estoque",
+          "changes": ["Estoque: `available + qtd`"]
+        }
+      ]
+    }
+  ]
+}

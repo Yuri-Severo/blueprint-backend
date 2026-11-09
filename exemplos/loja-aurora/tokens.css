@@ -1,0 +1,40 @@
+/*
+ * Loja Aurora (projeto FICTÍCIO). Num projeto real, cada valor vem de uma
+ * fonte de verdade do repositório; aqui elas são imaginárias, mas o registro
+ * segue o mesmo formato:
+ *   packages/ui/src/theme.ts      (paleta: indigo, pêssego, neutros)
+ *   apps/admin/src/globals.css    (--radius, sombras do painel)
+ * Regra da marca: índigo é a cor de ação; pêssego marca o item selecionado.
+ */
+:root {
+  --bp-font: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif; /* theme.ts fontFamily.sans */
+  --bp-font-mono: "JetBrains Mono", ui-monospace, monospace;           /* theme.ts fontFamily.mono */
+
+  --bp-bg: #f6f5fb;        /* neutral.50 */
+  --bp-dot: #d2cfe3;       /* neutral.300 */
+  --bp-surface: #ffffff;   /* white */
+  --bp-surface-2: #f0eef8; /* neutral.100 */
+  --bp-border: #1e19451a;  /* ink com 10% (o tema não tem cor de borda própria) */
+
+  --bp-text: #1e1945;       /* ink */
+  --bp-text-soft: #5c5878;  /* neutral.600 */
+  --bp-text-faint: #8d89a6; /* neutral.400 */
+
+  --bp-accent: #4a3fd0;         /* indigo.600: cor de ação */
+  --bp-accent-text: #ffffff;    /* contraste 6,9:1 sobre indigo.600 */
+  --bp-highlight: #ffe2d4;      /* peach.100: selecionado */
+  --bp-highlight-text: #7a2f12; /* peach.900 */
+
+  --bp-edge: #6d66b3;        /* indigo.400 */
+  --bp-edge-strong: #2f278f; /* indigo.800 */
+
+  --bp-ok: #2f8a5b;      /* success */
+  --bp-warn: #8a5a00;    /* warning (texto) */
+  --bp-warn-bg: #fdf1db; /* warning (fundo) */
+  --bp-danger: #c2362b;  /* danger */
+
+  --bp-radius: 12px;    /* globals.css --radius */
+  --bp-radius-sm: 8px;  /* botões do painel */
+  --bp-shadow: 0 1px 2px #1e19451a, 0 4px 10px -2px #1e194514;
+  --bp-shadow-float: 0 4px 18px #1e194526;
+}
